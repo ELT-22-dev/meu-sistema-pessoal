@@ -4,7 +4,7 @@
 /node_modules
 /.pnp
 .pnp.js
-package-lock.json
+
 yarn.lock
 pnpm-lock.yaml
 
@@ -49,3 +49,6 @@ next-env.d.ts
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# banco local (PGlite)
+/.pgdata

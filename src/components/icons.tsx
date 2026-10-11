@@ -87,7 +87,23 @@ import {
   IconUsers,
   IconVideo,
   IconCrown,
-  IconX
+  IconX,
+  IconBriefcase,
+  IconFileInvoice,
+  IconNeedleThread,
+  IconTag,
+  IconWallet,
+  IconCash,
+  IconArrowUpRight,
+  IconArrowDownLeft,
+  IconBrandWhatsapp,
+  IconMail,
+  IconWorld,
+  IconCopy,
+  IconPrinter,
+  IconListCheck,
+  IconCalendarDue,
+  IconFilter
 } from '@tabler/icons-react';
 
 export type Icon = React.ComponentType<IconProps>;
@@ -219,5 +235,23 @@ export const Icons = {
   slash: IconSlash,
   calendar: IconCalendar,
   galleryVerticalEnd: IconStack2,
-  moreHorizontal: IconDots
+  moreHorizontal: IconDots,
+
+  // Domínio
+  projects: IconBriefcase,
+  quote: IconFileInvoice,
+  sewing: IconNeedleThread,
+  tag: IconTag,
+  wallet: IconWallet,
+  cash: IconCash,
+  income: IconArrowDownLeft,
+  expense: IconArrowUpRight,
+  whatsapp: IconBrandWhatsapp,
+  mail: IconMail,
+  world: IconWorld,
+  copy: IconCopy,
+  printer: IconPrinter,
+  tasks: IconListCheck,
+  due: IconCalendarDue,
+  filter: IconFilter
 };

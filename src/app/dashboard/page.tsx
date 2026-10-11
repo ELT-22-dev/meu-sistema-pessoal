@@ -1,12 +1,10 @@
-import { auth } from '@clerk/nextjs/server';
-import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
+import { getSession } from '@/lib/auth';
+import OverviewPage from '@/features/overview/overview-page';
 
-export default async function Dashboard() {
-  const { userId } = await auth();
+export const metadata: Metadata = { title: 'Início' };
 
-  if (!userId) {
-    return redirect('/auth/sign-in');
-  } else {
-    redirect('/dashboard/overview');
-  }
+export default async function Page() {
+  const session = await getSession();
+  return <OverviewPage name={session?.name ?? ''} />;
 }
