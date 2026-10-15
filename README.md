@@ -49,8 +49,8 @@ npm run db:studio     # navegador visual do banco
 
 ## Deploy (Railway)
 
-O `railway.json` já configura build, migração antes de cada deploy (`preDeployCommand`)
-e healthcheck em `/api/health`.
+O `railway.json` já configura build, start e healthcheck em `/api/health`. As migrações
+rodam no `npm start` (antes do Next subir) e só aplicam o que falta.
 
 1. No projeto do Railway: **+ New → Database → PostgreSQL**.
 2. **+ New → GitHub Repo → meu-sistema-pessoal**.

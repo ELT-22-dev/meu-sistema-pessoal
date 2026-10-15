@@ -10,4 +10,5 @@
 - Listas usam `DataList` (tabela no desktop, cards no celular); formulários usam `FormSheet`
   (drawer de baixo no celular). Evite overflow horizontal: textos longos com `truncate` + `min-w-0`.
 - Esquema do banco em `src/db/schema.ts`; após mudar, `npm run db:generate` e commitar a migração.
-- Deploy: Railway (não Vercel) — `railway.json`; migrações rodam no `preDeployCommand`.
+- Deploy: Railway (não Vercel) — `railway.json`; migrações rodam no `npm start` (`scripts/migrate.mjs`,
+  sem dependências de dev — o Railway não instala devDependencies em produção).
