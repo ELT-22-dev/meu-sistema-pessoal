@@ -31,18 +31,22 @@ import type { SewingPayment } from '@/db/schema';
 import {
   deleteSewingEntry,
   deleteSewingPayment,
+  lastPricesQuery,
   sewingEntriesQuery,
   sewingModelsQuery,
   sewingPaymentsQuery,
   sewingSummaryQuery,
+  sewingWorkersQuery,
   type SewingEntryRow,
   type SewingSummary
 } from './api';
 import { QuickEntry } from './quick-entry';
 import { SewingEntrySheet, SewingPaymentSheet } from './sewing-forms';
+import { SEWING_ROLES } from './schema';
 
 const chartConfig = {
-  pieces: { label: 'Peças', color: 'var(--chart-1)' }
+  pieces: { label: 'Eu', color: 'var(--chart-1)' },
+  teamPieces: { label: 'Equipe', color: 'var(--chart-2)' }
 } satisfies ChartConfig;
 
 function ProductionChart({ summary }: { summary: SewingSummary }) {
@@ -52,7 +56,8 @@ function ProductionChart({ summary }: { summary: SewingSummary }) {
     const today = todayISO();
     return Array.from({ length: 30 }, (_, i) => {
       const date = addDaysISO(today, i - 29);
-      return { date, pieces: map.get(date)?.pieces ?? 0, value: map.get(date)?.value ?? 0 };
+      const s = map.get(date);
+      return { date, pieces: s?.pieces ?? 0, teamPieces: s?.teamPieces ?? 0, value: s?.value ?? 0 };
     });
   }, [summary.series]);
 
@@ -81,23 +86,40 @@ function ProductionChart({ summary }: { summary: SewingSummary }) {
             />
           }
         />
-        <Bar dataKey='pieces' fill='var(--color-pieces)' radius={4} />
+        <Bar dataKey='pieces' stackId='a' fill='var(--color-pieces)' />
+        <Bar
+          dataKey='teamPieces'
+          stackId='a'
+          fill='var(--color-teamPieces)'
+          radius={[4, 4, 0, 0]}
+        />
       </BarChart>
     </ChartContainer>
   );
 }
 
+type DayGroup = {
+  date: string;
+  mine: number;
+  mineValue: number;
+  team: number;
+  items: SewingEntryRow[];
+};
+
 function groupByDate(entries: SewingEntryRow[]) {
-  const groups: { date: string; pieces: number; value: number; items: SewingEntryRow[] }[] = [];
+  const groups: DayGroup[] = [];
   for (const e of entries) {
     let g = groups.find((x) => x.date === e.date);
     if (!g) {
-      g = { date: e.date, pieces: 0, value: 0, items: [] };
+      g = { date: e.date, mine: 0, mineValue: 0, team: 0, items: [] };
       groups.push(g);
     }
     g.items.push(e);
-    g.pieces += e.quantity;
-    g.value += e.total;
+    if (e.workerId) g.team += e.quantity;
+    else {
+      g.mine += e.quantity;
+      g.mineValue += e.total;
+    }
   }
   return groups;
 }
@@ -110,6 +132,10 @@ export default function SewingPage() {
     sewingEntriesQuery({ from: addDaysISO(todayISO(), -range), to: todayISO() })
   );
   const { data: payments } = useQuery(sewingPaymentsQuery());
+  const { data: workers = [], isLoading: loadingWorkers } = useQuery(sewingWorkersQuery());
+  const { data: prices } = useQuery(lastPricesQuery());
+  const teamActive = workers.filter((w) => w.active || w.monthPieces > 0);
+  const teamMonth = teamActive.reduce((s, w) => s + w.monthPieces, 0);
 
   const [editingEntry, setEditingEntry] = useState<SewingEntryRow | null>(null);
   const [deletingEntry, setDeletingEntry] = useState<SewingEntryRow | null>(null);
@@ -133,21 +159,37 @@ export default function SewingPage() {
   return (
     <PageContainer
       pageTitle='Costura'
-      pageDescription='Sua produção por peça na oficina e quanto falta receber.'
+      pageDescription='Sua produção e a da equipe na oficina, e quanto você tem a receber.'
       pageHeaderAction={
-        <Button variant='outline' render={<Link href='/dashboard/costura/modelos' />}>
-          <Icons.tag /> <span className='hidden sm:inline'>Modelos e preços</span>
-          <span className='sm:hidden'>Modelos</span>
-        </Button>
+        <div className='flex gap-2'>
+          <Button
+            variant='outline'
+            aria-label='Equipe'
+            render={<Link href='/dashboard/costura/equipe' />}
+          >
+            <Icons.teams /> <span className='hidden sm:inline'>Equipe</span>
+          </Button>
+          <Button
+            variant='outline'
+            aria-label='Modelos'
+            render={<Link href='/dashboard/costura/modelos' />}
+          >
+            <Icons.tag /> <span className='hidden sm:inline'>Modelos</span>
+          </Button>
+        </div>
       }
     >
       <div className='grid gap-4 lg:grid-cols-5'>
         <div className='space-y-4 lg:col-span-2'>
-          {loadingModels ? <Skeleton className='h-80 w-full' /> : <QuickEntry models={models} />}
+          {loadingModels || loadingWorkers ? (
+            <Skeleton className='h-80 w-full' />
+          ) : (
+            <QuickEntry models={models} workers={workers} prices={prices} />
+          )}
 
           <Card className='bg-primary/5 border-primary/30'>
             <CardHeader>
-              <CardDescription>A receber da oficina</CardDescription>
+              <CardDescription>A receber da oficina (minha produção)</CardDescription>
               <CardTitle className='text-primary text-3xl tabular-nums'>
                 {loadingSummary ? <Skeleton className='h-9 w-36' /> : formatMoney(summary?.balance)}
               </CardTitle>
@@ -179,7 +221,8 @@ export default function SewingPage() {
         </div>
 
         <div className='space-y-4 lg:col-span-3'>
-          <div className='grid grid-cols-2 gap-3'>
+          <h2 className='text-muted-foreground text-sm font-medium'>Minha produção</h2>
+          <div className='-mt-2 grid grid-cols-2 gap-3'>
             <StatCard
               label='Hoje'
               value={`${formatNumber(summary?.today.pieces)} pç`}
@@ -209,8 +252,49 @@ export default function SewingPage() {
 
           <Card>
             <CardHeader>
+              <CardTitle>Equipe este mês</CardTitle>
+              <CardDescription>
+                {formatNumber(teamMonth)} peças · a oficina paga direto a cada um
+              </CardDescription>
+              <CardAction>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  render={<Link href='/dashboard/costura/equipe' />}
+                >
+                  {teamActive.length ? 'Ver equipe' : 'Adicionar'}
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent className='space-y-2'>
+              {teamActive.length === 0 && (
+                <p className='text-muted-foreground text-sm'>
+                  Cadastre os retistas para lançar a produção de cada um.
+                </p>
+              )}
+              {teamActive.map((w) => (
+                <div key={w.id} className='flex items-center justify-between gap-2 text-sm'>
+                  <span className='min-w-0 truncate'>
+                    {w.name}{' '}
+                    <span className='text-muted-foreground text-xs'>
+                      · {SEWING_ROLES.find((r) => r.value === w.role)?.label ?? w.role}
+                    </span>
+                  </span>
+                  <span className='text-muted-foreground shrink-0 tabular-nums'>
+                    hoje {formatNumber(w.todayPieces)} · mês{' '}
+                    <span className='text-foreground font-medium'>
+                      {formatNumber(w.monthPieces)} pç
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle>Peças por dia</CardTitle>
-              <CardDescription>Últimos 30 dias</CardDescription>
+              <CardDescription>Últimos 30 dias — você e a equipe</CardDescription>
             </CardHeader>
             <CardContent>
               {summary ? (
@@ -224,7 +308,7 @@ export default function SewingPage() {
           {summary && summary.byModel.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Este mês por modelo</CardTitle>
+                <CardTitle>Minhas peças no mês por modelo</CardTitle>
               </CardHeader>
               <CardContent className='space-y-2'>
                 {summary.byModel.map((m) => (
@@ -260,16 +344,30 @@ export default function SewingPage() {
                 <div className='text-sm font-semibold capitalize'>
                   {formatDate(g.date, { weekday: 'long', day: '2-digit', month: '2-digit' })}
                 </div>
-                <div className='text-muted-foreground text-sm tabular-nums'>
-                  {formatNumber(g.pieces)} pç ·{' '}
-                  <span className='text-foreground font-medium'>{formatMoney(g.value)}</span>
+                <div className='text-muted-foreground text-right text-xs tabular-nums sm:text-sm'>
+                  {g.mine > 0 && (
+                    <div>
+                      Eu {formatNumber(g.mine)} pç ·{' '}
+                      <span className='text-foreground font-medium'>
+                        {formatMoney(g.mineValue)}
+                      </span>
+                    </div>
+                  )}
+                  {g.team > 0 && <div>Equipe {formatNumber(g.team)} pç</div>}
                 </div>
               </div>
               <ul className='divide-y px-4'>
                 {g.items.map((e) => (
                   <li key={e.id} className='flex items-center gap-2 py-1.5 text-sm'>
                     <span className='min-w-0 flex-1 truncate'>
-                      {e.modelName}
+                      <span
+                        className={
+                          e.workerId ? 'text-chart-2 font-medium' : 'text-primary font-medium'
+                        }
+                      >
+                        {e.workerName ?? 'Eu'}
+                      </span>{' '}
+                      · {e.modelName}
                       {e.notes && <span className='text-muted-foreground'> — {e.notes}</span>}
                     </span>
                     <span className='tabular-nums'>
@@ -354,6 +452,7 @@ export default function SewingPage() {
           key={editingEntry.id}
           entry={editingEntry}
           models={models}
+          workers={workers}
           open
           onOpenChange={(o) => !o && setEditingEntry(null)}
         />
@@ -376,7 +475,7 @@ export default function SewingPage() {
         title='Excluir lançamento?'
         description={
           deletingEntry
-            ? `${deletingEntry.quantity} × ${deletingEntry.modelName} em ${formatDate(deletingEntry.date)}`
+            ? `${deletingEntry.workerName ?? 'Eu'}: ${deletingEntry.quantity} × ${deletingEntry.modelName} em ${formatDate(deletingEntry.date)}`
             : undefined
         }
       />

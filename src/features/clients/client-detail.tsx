@@ -15,6 +15,7 @@ import { PaidBadge, ProjectStatusBadge, QuoteStatusBadge } from '@/components/ap
 import { useApiMutation } from '@/hooks/use-api-mutation';
 import { formatDate, formatMoney } from '@/lib/format';
 import { ProjectFormSheet } from '@/features/projects/project-form';
+import { RecurringFormSheet } from '@/features/recurring/recurring-form';
 import { clientQuery, deleteClient, whatsappLink } from './api';
 import { ClientFormSheet } from './client-form';
 
@@ -23,6 +24,7 @@ export default function ClientDetail({ id }: { id: number }) {
   const { data: client, isLoading, error } = useQuery(clientQuery(id));
   const [editOpen, setEditOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
+  const [recurringOpen, setRecurringOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const remove = useApiMutation(deleteClient, {
     success: 'Cliente excluído',
@@ -102,6 +104,9 @@ export default function ClientDetail({ id }: { id: number }) {
             render={<Link href={`/dashboard/orcamentos/novo?clientId=${client.id}`} />}
           >
             <Icons.quote /> Orçamento
+          </Button>
+          <Button variant='secondary' onClick={() => setRecurringOpen(true)}>
+            <Icons.due /> Mensalidade
           </Button>
         </div>
 
@@ -213,6 +218,11 @@ export default function ClientDetail({ id }: { id: number }) {
       </div>
 
       <ClientFormSheet client={client} open={editOpen} onOpenChange={setEditOpen} />
+      <RecurringFormSheet
+        defaultClientId={client.id}
+        open={recurringOpen}
+        onOpenChange={setRecurringOpen}
+      />
       <ProjectFormSheet
         open={projectOpen}
         onOpenChange={setProjectOpen}

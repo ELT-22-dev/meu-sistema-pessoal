@@ -9,10 +9,10 @@ export const GET = handler(async () => {
     .select({
       ...getTableColumns(sewingModels),
       totalPieces: sql<number>`(
-        select coalesce(sum(e.quantity), 0) from sewing_entries e where e.model_id = ${sewingModels.id}
+        select coalesce(sum(e.quantity), 0) from sewing_entries e where e.model_id = "sewing_models"."id"
       )`.mapWith(Number),
       lastUsed: sql<string | null>`(
-        select max(e.date)::text from sewing_entries e where e.model_id = ${sewingModels.id}
+        select max(e.date)::text from sewing_entries e where e.model_id = "sewing_models"."id"
       )`
     })
     .from(sewingModels)

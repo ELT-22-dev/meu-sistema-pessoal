@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { sewingEntries, sewingModels } from '@/db/schema';
+import { sewingEntries } from '@/db/schema';
+import { checkEntryRefs } from '@/server/sewing';
 import { sewingEntrySchema } from '@/features/sewing/schema';
-import { HttpError, handler, notFound, parseBody, parseId } from '@/lib/api-handler';
+import { handler, notFound, parseBody, parseId } from '@/lib/api-handler';
 
 export const PUT = handler(async (req, ctx) => {
   const id = await parseId(ctx);
@@ -10,15 +11,10 @@ export const PUT = handler(async (req, ctx) => {
   const current = await db.query.sewingEntries.findFirst({ where: eq(sewingEntries.id, id) });
   if (!current) throw notFound('Lançamento');
 
-  // Mantém o preço original, a menos que o modelo tenha mudado.
-  let unitPrice = current.unitPrice;
-  if (data.modelId !== current.modelId) {
-    const model = await db.query.sewingModels.findFirst({
-      where: eq(sewingModels.id, data.modelId)
-    });
-    if (!model) throw new HttpError(400, 'Modelo não encontrado');
-    unitPrice = model.pricePerPiece;
-  }
+  // Preço informado vence; senão mantém o original, ou usa o do novo modelo se ele mudou.
+  const modelPrice = await checkEntryRefs(data.modelId, data.workerId);
+  const unitPrice =
+    data.unitPrice ?? (data.modelId !== current.modelId ? modelPrice : current.unitPrice);
 
   const [row] = await db
     .update(sewingEntries)

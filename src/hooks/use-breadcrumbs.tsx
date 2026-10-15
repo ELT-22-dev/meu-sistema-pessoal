@@ -10,6 +10,9 @@ const SEGMENT_TITLES: Record<string, string> = {
   orcamentos: 'Orçamentos',
   costura: 'Costura',
   modelos: 'Modelos',
+  equipe: 'Equipe',
+  agenda: 'Agenda',
+  mensalidades: 'Mensalidades',
   financeiro: 'Financeiro',
   novo: 'Novo'
 };

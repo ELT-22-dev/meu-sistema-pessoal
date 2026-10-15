@@ -5,6 +5,7 @@ import { transactionSchema } from '@/features/finance/schema';
 import { created, handler, param, parseBody } from '@/lib/api-handler';
 import { currentMonth, monthRange } from '@/lib/format';
 import { like } from '@/server/sql';
+import { syncRecurring } from '@/server/recurring';
 
 const sumWhere = (cond: ReturnType<typeof sql>) =>
   sql<number>`coalesce(sum(${transactions.amount}) filter (where ${cond}), 0)`.mapWith(Number);
@@ -14,6 +15,7 @@ export const GET = handler(async (req) => {
     ? param(req, 'month')!
     : currentMonth();
   const { from, to } = monthRange(month);
+  await syncRecurring(month);
   const type = param(req, 'type');
   const area = param(req, 'area');
   const status = param(req, 'status');

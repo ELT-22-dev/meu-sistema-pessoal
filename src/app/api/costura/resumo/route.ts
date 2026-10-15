@@ -7,7 +7,10 @@ type Totals = { pieces: number; value: number; days: number };
 
 const num = (v: unknown) => Number(v ?? 0);
 
-/** Resumo da produção: hoje, semana, mês, saldo a receber da oficina e séries. */
+/**
+ * Resumo da MINHA produção (worker_id nulo): hoje, semana, mês, saldo a receber da oficina.
+ * A série diária traz também as peças da equipe, para comparação.
+ */
 export const GET = handler(async (req) => {
   // O cliente manda a data local dele para "hoje" não depender do fuso do servidor.
   const today = /^\d{4}-\d{2}-\d{2}$/.test(param(req, 'today') ?? '')
@@ -21,7 +24,7 @@ export const GET = handler(async (req) => {
     select coalesce(sum(quantity), 0) as pieces,
            coalesce(sum(quantity * unit_price), 0) as value,
            count(distinct date) as days
-    from sewing_entries where date between ${from} and ${today}`;
+    from sewing_entries where worker_id is null and date between ${from} and ${today}`;
 
   const [todayRows, weekRows, monthRows, balanceRows, series, byModel, lastPayment] =
     await Promise.all([
@@ -29,16 +32,20 @@ export const GET = handler(async (req) => {
       db.execute(totals(week)),
       db.execute(totals(monthFrom)),
       db.execute(sql`
-        select (select coalesce(sum(quantity * unit_price), 0) from sewing_entries) as produced,
+        select (select coalesce(sum(quantity * unit_price), 0) from sewing_entries
+                where worker_id is null) as produced,
                (select coalesce(sum(amount), 0) from sewing_payments) as paid`),
       db.execute(sql`
-        select date::text as date, sum(quantity) as pieces, sum(quantity * unit_price) as value
+        select date::text as date,
+               coalesce(sum(quantity) filter (where worker_id is null), 0) as pieces,
+               coalesce(sum(quantity * unit_price) filter (where worker_id is null), 0) as value,
+               coalesce(sum(quantity) filter (where worker_id is not null), 0) as team_pieces
         from sewing_entries where date between ${seriesFrom} and ${today}
         group by date order by date`),
       db.execute(sql`
         select m.id, m.name, sum(e.quantity) as pieces, sum(e.quantity * e.unit_price) as value
         from sewing_entries e join sewing_models m on m.id = e.model_id
-        where e.date between ${monthFrom} and ${today}
+        where e.worker_id is null and e.date between ${monthFrom} and ${today}
         group by m.id, m.name order by pieces desc`),
       db.execute(sql`select date::text as date, amount from sewing_payments
         order by date desc, id desc limit 1`)
@@ -66,7 +73,8 @@ export const GET = handler(async (req) => {
     series: series.map((r) => ({
       date: String(r.date),
       pieces: num(r.pieces),
-      value: num(r.value)
+      value: num(r.value),
+      teamPieces: num(r.team_pieces)
     })),
     byModel: byModel.map((r) => ({
       id: num(r.id),

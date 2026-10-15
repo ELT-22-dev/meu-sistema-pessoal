@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { handler, param } from '@/lib/api-handler';
 import { addDaysISO, monthRange, shiftMonth, todayISO } from '@/lib/format';
+import { syncRecurring } from '@/server/recurring';
 
 const num = (v: unknown) => Number(v ?? 0);
 
@@ -15,6 +16,7 @@ export const GET = handler(async (req) => {
   const prev = monthRange(shiftMonth(month, -1));
   const sixMonthsFrom = `${shiftMonth(month, -5)}-01`;
   const soon = addDaysISO(today, 14);
+  await syncRecurring(month);
 
   const [
     monthRows,
@@ -42,18 +44,19 @@ export const GET = handler(async (req) => {
             where t.project_id = p.id and t.type = 'receita' and t.status = 'pago'), 0), 0)), 0)
          from projects p where p.status in ('andamento', 'revisao', 'concluido')) as projects,
         (select coalesce(sum(amount), 0) from transactions
-         where type = 'receita' and status = 'pendente' and project_id is null) as pending_income,
+         where type = 'receita' and status = 'pendente' and date <= ${to}
+           and (project_id is null or recurring_id is not null)) as pending_income,
         (select count(*) from projects where status in ('andamento', 'revisao')) as active_projects,
         (select count(*) from quotes where status in ('rascunho', 'enviado')) as open_quotes`),
     db.execute(sql`
       select
-        (select coalesce(sum(quantity * unit_price), 0) from sewing_entries)
+        (select coalesce(sum(quantity * unit_price), 0) from sewing_entries where worker_id is null)
           - (select coalesce(sum(amount), 0) from sewing_payments) as balance,
         (select coalesce(sum(quantity), 0) from sewing_entries
-         where date between ${from} and ${to}) as month_pieces,
+         where worker_id is null and date between ${from} and ${to}) as month_pieces,
         (select coalesce(sum(quantity * unit_price), 0) from sewing_entries
-         where date between ${from} and ${to}) as month_value,
-        (select coalesce(sum(quantity), 0) from sewing_entries where date = ${today}) as today_pieces`),
+         where worker_id is null and date between ${from} and ${to}) as month_value,
+        (select coalesce(sum(quantity), 0) from sewing_entries where worker_id is null and date = ${today}) as today_pieces`),
     db.execute(sql`
       select to_char(date, 'YYYY-MM') as month,
              coalesce(sum(amount) filter (where type = 'receita'), 0) as income,

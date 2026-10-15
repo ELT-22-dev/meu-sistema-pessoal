@@ -4,11 +4,13 @@ import { clients, projects, quotes, transactions } from '@/db/schema';
 import { clientSchema } from '@/features/clients/schema';
 import { handler, notFound, parseBody, parseId } from '@/lib/api-handler';
 import { projectReceived, quoteTotal } from '@/server/sql';
+import { syncRecurring } from '@/server/recurring';
 
 export const GET = handler(async (_req, ctx) => {
   const id = await parseId(ctx);
   const client = await db.query.clients.findFirst({ where: eq(clients.id, id) });
   if (!client) throw notFound('Cliente');
+  await syncRecurring();
 
   const [clientProjects, clientQuotes, payments] = await Promise.all([
     db

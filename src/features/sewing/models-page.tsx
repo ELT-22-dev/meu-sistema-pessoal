@@ -38,8 +38,8 @@ export default function SewingModelsPage() {
 
   return (
     <PageContainer
-      pageTitle='Modelos e preços'
-      pageDescription='O que a oficina paga por peça em cada modelo ou operação.'
+      pageTitle='Modelos de peça'
+      pageDescription='Calça, short, camisa... com o preço padrão por peça (dá para ajustar em cada lançamento).'
       pageHeaderAction={
         <Button onClick={() => openForm(null)}>
           <Icons.add /> <span className='hidden sm:inline'>Novo modelo</span>
@@ -55,7 +55,7 @@ export default function SewingModelsPage() {
         empty={{
           icon: <Icons.tag />,
           title: 'Nenhum modelo cadastrado',
-          description: 'Ex.: "Camiseta — fechar lateral" a R$ 0,35 por peça.',
+          description: 'Ex.: Calça a R$ 1,00 por peça.',
           action: (
             <Button onClick={() => openForm(null)}>
               <Icons.add /> Novo modelo
@@ -64,7 +64,7 @@ export default function SewingModelsPage() {
         }}
         columns={[
           {
-            header: 'Modelo / operação',
+            header: 'Modelo',
             cell: (m) => (
               <div className='flex items-center gap-2'>
                 <span className='font-medium'>{m.name}</span>

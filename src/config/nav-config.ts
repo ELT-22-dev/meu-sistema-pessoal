@@ -13,6 +13,13 @@ export const navGroups: NavGroup[] = [
         icon: 'dashboard',
         shortcut: ['i', 'i'],
         items: []
+      },
+      {
+        title: 'Agenda',
+        url: '/dashboard/agenda',
+        icon: 'calendar',
+        shortcut: ['a', 'a'],
+        items: []
       }
     ]
   },
@@ -53,7 +60,14 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
-        title: 'Modelos e preços',
+        title: 'Equipe',
+        url: '/dashboard/costura/equipe',
+        icon: 'teams',
+        shortcut: ['e', 'e'],
+        items: []
+      },
+      {
+        title: 'Modelos de peça',
         url: '/dashboard/costura/modelos',
         icon: 'tag',
         shortcut: ['m', 'm'],
@@ -69,6 +83,13 @@ export const navGroups: NavGroup[] = [
         url: '/dashboard/financeiro',
         icon: 'wallet',
         shortcut: ['f', 'f'],
+        items: []
+      },
+      {
+        title: 'Mensalidades',
+        url: '/dashboard/mensalidades',
+        icon: 'due',
+        shortcut: ['r', 'r'],
         items: []
       }
     ]

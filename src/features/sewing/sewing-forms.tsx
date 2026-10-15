@@ -5,26 +5,31 @@ import { FormSheet } from '@/components/app/form-sheet';
 import { useApiMutation } from '@/hooks/use-api-mutation';
 import { useAppForm } from '@/lib/form';
 import { addDaysISO, todayISO } from '@/lib/format';
-import type { SewingModel, SewingPayment } from '@/db/schema';
+import type { SewingModel, SewingPayment, SewingWorker } from '@/db/schema';
 import {
   saveSewingEntry,
   saveSewingModel,
   saveSewingPayment,
+  saveSewingWorker,
   type SewingEntryRow,
-  type SewingModelRow
+  type SewingModelRow,
+  type SewingWorkerRow
 } from './api';
 import {
   sewingEntrySchema,
   sewingModelSchema,
   sewingPaymentSchema,
+  sewingWorkerSchema,
+  SEWING_ROLES,
   type SewingEntryInput,
   type SewingModelInput,
-  type SewingPaymentInput
+  type SewingPaymentInput,
+  type SewingWorkerInput
 } from './schema';
 
 type SheetProps = { open: boolean; onOpenChange: (open: boolean) => void };
 
-// ---------------- Modelo / operação ----------------
+// ---------------- Modelo de peça ----------------
 
 export function SewingModelSheet({
   model,
@@ -54,8 +59,8 @@ export function SewingModelSheet({
     <FormSheet
       open={open}
       onOpenChange={onOpenChange}
-      title={isEdit ? 'Editar modelo' : 'Novo modelo / operação'}
-      description='O que a oficina paga por peça. Mudar o preço não altera lançamentos antigos.'
+      title={isEdit ? 'Editar modelo' : 'Novo modelo de peça'}
+      description='Preço padrão por peça. Dá para ajustar em cada lançamento; mudar aqui não altera lançamentos antigos.'
       formId='sewing-model-form'
       loading={mutation.isPending}
     >
@@ -70,7 +75,7 @@ export function SewingModelSheet({
           <form.AppField
             name='name'
             children={(field) => (
-              <field.TextField label='Nome' required placeholder='Ex.: Camiseta — fechar lateral' />
+              <field.TextField label='Modelo' required placeholder='Ex.: Calça, Short, Camisa' />
             )}
           />
           <form.AppField
@@ -111,9 +116,14 @@ export function SewingModelSheet({
 export function SewingEntrySheet({
   entry,
   models,
+  workers,
   open,
   onOpenChange
-}: SheetProps & { entry?: SewingEntryRow | null; models: SewingModelRow[] }) {
+}: SheetProps & {
+  entry?: SewingEntryRow | null;
+  models: SewingModelRow[];
+  workers: SewingWorkerRow[];
+}) {
   const isEdit = !!entry;
   const mutation = useApiMutation(saveSewingEntry, {
     success: isEdit ? 'Lançamento atualizado' : 'Produção lançada',
@@ -122,8 +132,10 @@ export function SewingEntrySheet({
   const form = useAppForm({
     defaultValues: {
       date: entry?.date ?? todayISO(),
+      workerId: String(entry?.workerId ?? ''),
       modelId: String(entry?.modelId ?? models.find((m) => m.active)?.id ?? ''),
       quantity: entry?.quantity ?? undefined,
+      unitPrice: entry?.unitPrice ?? undefined,
       notes: entry?.notes ?? ''
     } as SewingEntryInput,
     validators: { onSubmit: sewingEntrySchema },
@@ -135,6 +147,12 @@ export function SewingEntrySheet({
   const options = models
     .filter((m) => m.active || m.id === entry?.modelId)
     .map((m) => ({ value: String(m.id), label: m.name }));
+  const workerOptions = [
+    { value: '', label: 'Eu' },
+    ...workers
+      .filter((w) => w.active || w.id === entry?.workerId)
+      .map((w) => ({ value: String(w.id), label: w.name }))
+  ];
 
   return (
     <FormSheet
@@ -152,12 +170,18 @@ export function SewingEntrySheet({
         }}
       >
         <FieldGroup>
-          <form.AppField
-            name='modelId'
-            children={(field) => (
-              <field.SelectField label='Modelo / operação' required options={options} />
-            )}
-          />
+          <div className='grid grid-cols-2 gap-4'>
+            <form.AppField
+              name='workerId'
+              children={(field) => (
+                <field.SelectField label='Quem costurou' options={workerOptions} />
+              )}
+            />
+            <form.AppField
+              name='modelId'
+              children={(field) => <field.SelectField label='Modelo' required options={options} />}
+            />
+          </div>
           <div className='grid grid-cols-2 gap-4'>
             <form.AppField
               name='quantity'
@@ -173,10 +197,22 @@ export function SewingEntrySheet({
               )}
             />
             <form.AppField
-              name='date'
-              children={(field) => <field.TextField label='Dia' required type='date' />}
+              name='unitPrice'
+              children={(field) => (
+                <field.TextField
+                  label='Preço/peça (R$)'
+                  type='number'
+                  inputMode='decimal'
+                  min={0}
+                  step={0.01}
+                />
+              )}
             />
           </div>
+          <form.AppField
+            name='date'
+            children={(field) => <field.TextField label='Dia' required type='date' />}
+          />
           <form.AppField
             name='notes'
             children={(field) => <field.TextField label='Observação' placeholder='Opcional' />}
@@ -270,6 +306,78 @@ export function SewingPaymentSheet({
             children={(field) => (
               <field.TextField label='Observação' placeholder='Ex.: Pix, vale descontado...' />
             )}
+          />
+        </FieldGroup>
+      </form>
+    </FormSheet>
+  );
+}
+
+// ---------------- Pessoa da equipe ----------------
+
+export function SewingWorkerSheet({
+  worker,
+  open,
+  onOpenChange
+}: SheetProps & { worker?: SewingWorker | null }) {
+  const isEdit = !!worker;
+  const mutation = useApiMutation(saveSewingWorker, {
+    success: isEdit ? 'Cadastro atualizado' : 'Pessoa adicionada à equipe',
+    onSuccess: () => onOpenChange(false)
+  });
+  const form = useAppForm({
+    defaultValues: {
+      name: worker?.name ?? '',
+      role: worker?.role ?? 'reta',
+      active: worker?.active ?? true,
+      notes: worker?.notes ?? ''
+    } as SewingWorkerInput,
+    validators: { onSubmit: sewingWorkerSchema },
+    onSubmit: async ({ value }) => {
+      await mutation.mutateAsync({ id: worker?.id, values: value });
+      if (!isEdit) form.reset();
+    }
+  });
+
+  return (
+    <FormSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEdit ? 'Editar pessoa' : 'Nova pessoa na equipe'}
+      description='A oficina paga a equipe — aqui fica só o registro da produção de cada um.'
+      formId='sewing-worker-form'
+      loading={mutation.isPending}
+    >
+      <form
+        id='sewing-worker-form'
+        onSubmit={(e) => {
+          e.preventDefault();
+          form.handleSubmit();
+        }}
+      >
+        <FieldGroup>
+          <form.AppField
+            name='name'
+            children={(field) => <field.TextField label='Nome' required placeholder='Ex.: Maria' />}
+          />
+          <form.AppField
+            name='role'
+            children={(field) => (
+              <field.SelectField label='Máquina / função' options={[...SEWING_ROLES]} />
+            )}
+          />
+          <form.AppField
+            name='active'
+            children={(field) => (
+              <field.SwitchField
+                label='Ativo'
+                description='Quem saiu da oficina pode ser desativado sem perder o histórico.'
+              />
+            )}
+          />
+          <form.AppField
+            name='notes'
+            children={(field) => <field.TextareaField label='Observações' rows={2} />}
           />
         </FieldGroup>
       </form>

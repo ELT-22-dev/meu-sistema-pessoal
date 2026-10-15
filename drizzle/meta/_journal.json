@@ -8,6 +8,13 @@
       "when": 1791726354273,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792078311211,
+      "tag": "0001_equipe_mensalidades",
+      "breakpoints": true
     }
   ]
 }
