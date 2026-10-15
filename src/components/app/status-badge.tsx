@@ -59,7 +59,12 @@ export function QuoteStatusBadge({ status }: { status: string }) {
   return <ToneBadge tone={QUOTE_TONE[status] ?? 'gray'}>{labelOf(QUOTE_STATUS, status)}</ToneBadge>;
 }
 
-const AREA_TONE: Record<string, Tone> = { dev: 'blue', costura: 'amber', pessoal: 'gray' };
+const AREA_TONE: Record<string, Tone> = {
+  dev: 'blue',
+  costura: 'amber',
+  cabeleireiro: 'sky',
+  pessoal: 'gray'
+};
 
 export function AreaBadge({ area }: { area: string }) {
   return <ToneBadge tone={AREA_TONE[area] ?? 'gray'}>{labelOf(TX_AREAS, area)}</ToneBadge>;

@@ -7,7 +7,7 @@ import { syncRecurring } from '@/server/recurring';
 type AgendaEvent = {
   key: string;
   date: string;
-  kind: 'receita' | 'despesa' | 'prazo' | 'tarefa' | 'costura';
+  kind: 'receita' | 'despesa' | 'prazo' | 'tarefa' | 'costura' | 'salao';
   title: string;
   subtitle: string | null;
   amount: number | null;
@@ -26,7 +26,7 @@ export const GET = handler(async (req) => {
   const { from, to } = monthRange(month);
   await syncRecurring(month);
 
-  const [txs, deadlines, tasks, sewing] = await Promise.all([
+  const [txs, deadlines, tasks, sewing, salon] = await Promise.all([
     db.execute(sql`
       select t.id, t.date::text as date, t.type, t.description, t.amount, t.status,
              c.name as client_name
@@ -49,6 +49,11 @@ export const GET = handler(async (req) => {
              coalesce(sum(quantity) filter (where worker_id is not null), 0) as team,
              coalesce(sum(quantity * unit_price) filter (where worker_id is null), 0) as value
       from sewing_entries where date between ${from} and ${to}
+      group by date order by date`),
+    db.execute(sql`
+      select date::text as date, sum(quantity) as cuts,
+             sum(round(quantity * unit_price * commission_pct / 100, 2)) as mine
+      from haircut_entries where date between ${from} and ${to}
       group by date order by date`)
   ]);
 
@@ -95,6 +100,16 @@ export const GET = handler(async (req) => {
       amount: num(s.value),
       done: true,
       href: '/dashboard/costura'
+    })),
+    ...salon.map((s) => ({
+      key: `c${s.date}`,
+      date: String(s.date),
+      kind: 'salao' as const,
+      title: `Salão: ${num(s.cuts)} cortes`,
+      subtitle: null,
+      amount: num(s.mine),
+      done: true,
+      href: '/dashboard/cabeleireiro'
     }))
   ];
 

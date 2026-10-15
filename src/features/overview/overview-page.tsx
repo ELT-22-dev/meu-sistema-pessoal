@@ -40,7 +40,8 @@ type Overview = {
   balance: number;
   toPay: number;
   prevIncome: number;
-  receivable: { projects: number; sewing: number; other: number };
+  receivable: { projects: number; sewing: number; salon: number; other: number };
+  salon: { monthCuts: number; monthValue: number };
   activeProjects: number;
   openQuotes: number;
   sewing: { monthPieces: number; monthValue: number; todayPieces: number };
@@ -79,6 +80,7 @@ const monthlyConfig = {
 const AREA_COLORS: Record<string, string> = {
   dev: 'var(--chart-2)',
   costura: 'var(--chart-3)',
+  cabeleireiro: 'var(--chart-4)',
   pessoal: 'var(--chart-5)'
 };
 
@@ -96,7 +98,10 @@ export default function OverviewPage({ name }: { name: string }) {
   const [txType, setTxType] = useState<'receita' | 'despesa'>('despesa');
 
   const receivableTotal = data
-    ? data.receivable.projects + data.receivable.sewing + data.receivable.other
+    ? data.receivable.projects +
+      data.receivable.sewing +
+      data.receivable.salon +
+      data.receivable.other
     : 0;
   const incomeDelta =
     data && data.prevIncome > 0 ? ((data.income - data.prevIncome) / data.prevIncome) * 100 : null;
@@ -172,7 +177,7 @@ export default function OverviewPage({ name }: { name: string }) {
             icon={<Icons.cash />}
             hint={
               data
-                ? `Projetos ${formatMoney(data.receivable.projects)} · Oficina ${formatMoney(data.receivable.sewing)}`
+                ? `Projetos ${formatMoney(data.receivable.projects)} · Oficina ${formatMoney(data.receivable.sewing)} · Salão ${formatMoney(data.receivable.salon)}`
                 : undefined
             }
           />

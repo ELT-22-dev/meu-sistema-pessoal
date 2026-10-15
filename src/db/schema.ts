@@ -161,7 +161,52 @@ export const sewingPayments = pgTable('sewing_payments', {
 });
 
 // ------------------------------------------------------------------
-// Financeiro (tudo junto: dev, costura, pessoal)
+// Cabeleireiro (sábados): recebo uma comissão (%) de cada corte
+// ------------------------------------------------------------------
+
+/** Tipo de corte com preço cobrado do cliente e a minha comissão (%). */
+export const haircutServices = pgTable('haircut_services', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  price: money('price').notNull(),
+  commissionPct: numeric('commission_pct', { precision: 5, scale: 2, mode: 'number' })
+    .notNull()
+    .default(50),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt()
+});
+
+/** Cortes do dia. Preço e comissão são copiados do tipo no lançamento (editáveis). */
+export const haircutEntries = pgTable(
+  'haircut_entries',
+  {
+    id: serial('id').primaryKey(),
+    date: day('date').notNull(),
+    serviceId: integer('service_id')
+      .notNull()
+      .references(() => haircutServices.id, { onDelete: 'restrict' }),
+    quantity: integer('quantity').notNull(),
+    unitPrice: money('unit_price').notNull(),
+    commissionPct: numeric('commission_pct', { precision: 5, scale: 2, mode: 'number' }).notNull(),
+    notes: text('notes'),
+    createdAt: createdAt()
+  },
+  (t) => [index('haircut_entries_date_idx').on(t.date)]
+);
+
+/** Pagamento recebido do salão. Gera uma receita no financeiro. */
+export const haircutPayments = pgTable('haircut_payments', {
+  id: serial('id').primaryKey(),
+  date: day('date').notNull(),
+  amount: money('amount').notNull(),
+  periodStart: day('period_start'),
+  periodEnd: day('period_end'),
+  notes: text('notes'),
+  createdAt: createdAt()
+});
+
+// ------------------------------------------------------------------
+// Financeiro (tudo junto: dev, costura, cabeleireiro, pessoal)
 // ------------------------------------------------------------------
 
 /**
@@ -206,6 +251,9 @@ export const transactions = pgTable(
     sewingPaymentId: integer('sewing_payment_id').references(() => sewingPayments.id, {
       onDelete: 'cascade'
     }),
+    haircutPaymentId: integer('haircut_payment_id').references(() => haircutPayments.id, {
+      onDelete: 'cascade'
+    }),
     recurringId: integer('recurring_id').references(() => recurringCharges.id, {
       onDelete: 'set null'
     }),
@@ -228,6 +276,9 @@ export type QuoteItem = typeof quoteItems.$inferSelect;
 export type SewingModel = typeof sewingModels.$inferSelect;
 export type SewingEntry = typeof sewingEntries.$inferSelect;
 export type SewingWorker = typeof sewingWorkers.$inferSelect;
+export type HaircutService = typeof haircutServices.$inferSelect;
+export type HaircutEntry = typeof haircutEntries.$inferSelect;
+export type HaircutPayment = typeof haircutPayments.$inferSelect;
 export type RecurringCharge = typeof recurringCharges.$inferSelect;
 export type SewingPayment = typeof sewingPayments.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;

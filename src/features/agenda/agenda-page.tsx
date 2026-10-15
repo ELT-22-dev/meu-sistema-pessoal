@@ -22,7 +22,7 @@ import {
 } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-type Kind = 'receita' | 'despesa' | 'prazo' | 'tarefa' | 'costura';
+type Kind = 'receita' | 'despesa' | 'prazo' | 'tarefa' | 'costura' | 'salao';
 type AgendaEvent = {
   key: string;
   date: string;
@@ -55,6 +55,11 @@ const KIND: Record<Kind, { label: string; dot: string; chip: string }> = {
     dot: 'bg-sky-500',
     chip: 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
   },
+  salao: {
+    label: 'Cabeleireiro',
+    dot: 'bg-pink-500',
+    chip: 'bg-pink-500/15 text-pink-700 dark:text-pink-300'
+  },
   costura: {
     label: 'Costura',
     dot: 'bg-amber-500',
@@ -79,7 +84,7 @@ function monthCells(month: string) {
 function statusLabel(e: AgendaEvent) {
   if (e.kind === 'receita') return e.done ? 'Recebido' : 'A receber';
   if (e.kind === 'despesa') return e.done ? 'Pago' : 'A pagar';
-  if (e.kind === 'costura') return null;
+  if (e.kind === 'costura' || e.kind === 'salao') return null;
   return e.done ? 'Concluído' : null;
 }
 
@@ -245,10 +250,12 @@ export default function AgendaPage() {
                           className={cn(
                             'truncate rounded px-1 py-0.5 text-[11px] leading-tight',
                             KIND[e.kind].chip,
-                            e.done && e.kind !== 'costura' && 'opacity-60'
+                            e.done && e.kind !== 'costura' && e.kind !== 'salao' && 'opacity-60'
                           )}
                         >
-                          {e.amount && e.kind !== 'costura' ? `${formatMoney(e.amount)} ` : ''}
+                          {e.amount && e.kind !== 'costura' && e.kind !== 'salao'
+                            ? `${formatMoney(e.amount)} `
+                            : ''}
                           {e.title}
                         </span>
                       ))}

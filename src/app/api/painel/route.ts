@@ -56,7 +56,13 @@ export const GET = handler(async (req) => {
          where worker_id is null and date between ${from} and ${to}) as month_pieces,
         (select coalesce(sum(quantity * unit_price), 0) from sewing_entries
          where worker_id is null and date between ${from} and ${to}) as month_value,
-        (select coalesce(sum(quantity), 0) from sewing_entries where worker_id is null and date = ${today}) as today_pieces`),
+        (select coalesce(sum(quantity), 0) from sewing_entries where worker_id is null and date = ${today}) as today_pieces,
+        (select coalesce(sum(round(quantity * unit_price * commission_pct / 100, 2)), 0) from haircut_entries)
+          - (select coalesce(sum(amount), 0) from haircut_payments) as salon_balance,
+        (select coalesce(sum(quantity), 0) from haircut_entries
+         where date between ${from} and ${to}) as month_cuts,
+        (select coalesce(sum(round(quantity * unit_price * commission_pct / 100, 2)), 0) from haircut_entries
+         where date between ${from} and ${to}) as month_cuts_value`),
     db.execute(sql`
       select to_char(date, 'YYYY-MM') as month,
              coalesce(sum(amount) filter (where type = 'receita'), 0) as income,
@@ -102,6 +108,7 @@ export const GET = handler(async (req) => {
     receivable: {
       projects: num(r.projects),
       sewing: Math.max(0, num(s.balance)),
+      salon: Math.max(0, num(s.salon_balance)),
       other: num(r.pending_income)
     },
     activeProjects: num(r.active_projects),
@@ -110,6 +117,10 @@ export const GET = handler(async (req) => {
       monthPieces: num(s.month_pieces),
       monthValue: num(s.month_value),
       todayPieces: num(s.today_pieces)
+    },
+    salon: {
+      monthCuts: num(s.month_cuts),
+      monthValue: num(s.month_cuts_value)
     },
     monthly: months.map((mm) => ({
       month: mm,

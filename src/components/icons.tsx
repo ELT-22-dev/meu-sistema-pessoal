@@ -103,7 +103,8 @@ import {
   IconPrinter,
   IconListCheck,
   IconCalendarDue,
-  IconFilter
+  IconFilter,
+  IconScissors
 } from '@tabler/icons-react';
 
 export type Icon = React.ComponentType<IconProps>;
@@ -253,5 +254,6 @@ export const Icons = {
   printer: IconPrinter,
   tasks: IconListCheck,
   due: IconCalendarDue,
-  filter: IconFilter
+  filter: IconFilter,
+  scissors: IconScissors
 };

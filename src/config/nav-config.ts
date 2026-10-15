@@ -76,6 +76,25 @@ export const navGroups: NavGroup[] = [
     ]
   },
   {
+    label: 'Cabeleireiro',
+    items: [
+      {
+        title: 'Cortes',
+        url: '/dashboard/cabeleireiro',
+        icon: 'scissors',
+        shortcut: ['k', 'k'],
+        items: []
+      },
+      {
+        title: 'Tipos de corte',
+        url: '/dashboard/cabeleireiro/tipos',
+        icon: 'tag',
+        shortcut: ['t', 't'],
+        items: []
+      }
+    ]
+  },
+  {
     label: 'Dinheiro',
     items: [
       {

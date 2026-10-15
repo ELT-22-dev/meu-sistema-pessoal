@@ -11,6 +11,8 @@ const SEGMENT_TITLES: Record<string, string> = {
   costura: 'Costura',
   modelos: 'Modelos',
   equipe: 'Equipe',
+  cabeleireiro: 'Cabeleireiro',
+  tipos: 'Tipos de corte',
   agenda: 'Agenda',
   mensalidades: 'Mensalidades',
   financeiro: 'Financeiro',

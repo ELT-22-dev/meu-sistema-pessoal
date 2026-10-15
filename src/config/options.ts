@@ -53,6 +53,7 @@ export const TX_TYPE_VALUES = values(TX_TYPES);
 export const TX_AREAS = [
   { value: 'dev', label: 'Sites e sistemas' },
   { value: 'costura', label: 'Costura' },
+  { value: 'cabeleireiro', label: 'Cabeleireiro' },
   { value: 'pessoal', label: 'Pessoal' }
 ] as const satisfies readonly Option[];
 export const TX_AREA_VALUES = values(TX_AREAS);
@@ -67,6 +68,7 @@ export const INCOME_CATEGORIES = [
   'Projeto',
   'Mensalidade / manutenção',
   'Costura',
+  'Cabeleireiro',
   'Venda',
   'Outro'
 ] as const;

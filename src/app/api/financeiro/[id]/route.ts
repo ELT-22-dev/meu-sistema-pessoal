@@ -12,6 +12,12 @@ async function findEditable(id: number) {
   if (tx.sewingPaymentId) {
     throw new HttpError(409, 'Este lançamento vem da Costura — edite pelo módulo Costura');
   }
+  if (tx.haircutPaymentId) {
+    throw new HttpError(
+      409,
+      'Este lançamento vem do Cabeleireiro — edite pelo módulo Cabeleireiro'
+    );
+  }
   return tx;
 }
 
