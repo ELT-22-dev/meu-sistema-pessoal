@@ -77,12 +77,7 @@ export default function TeamPage() {
           },
           { header: 'Máquina', cell: (w) => roleLabel(w.role) },
           {
-            header: 'Hoje',
-            className: 'tabular-nums',
-            cell: (w) => `${formatNumber(w.todayPieces)} pç`
-          },
-          {
-            header: 'Mês',
+            header: 'Este mês',
             className: 'tabular-nums',
             cell: (w) => (
               <span>
@@ -104,9 +99,7 @@ export default function TeamPage() {
                 <span className='truncate font-medium'>{w.name}</span>
                 {!w.active && <ToneBadge tone='gray'>Inativo</ToneBadge>}
               </div>
-              <div className='text-muted-foreground text-xs'>
-                {roleLabel(w.role)} · hoje {formatNumber(w.todayPieces)} pç
-              </div>
+              <div className='text-muted-foreground text-xs'>{roleLabel(w.role)}</div>
             </div>
             <div className='text-right'>
               <div className='font-semibold tabular-nums'>{formatNumber(w.monthPieces)} pç</div>

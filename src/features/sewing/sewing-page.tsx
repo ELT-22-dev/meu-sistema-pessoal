@@ -1,9 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { Bar, BarChart, CartesianGrid, XAxis } from 'recharts';
 import PageContainer from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,19 +13,13 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig
-} from '@/components/ui/chart';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Icons } from '@/components/icons';
 import { AlertModal } from '@/components/modal/alert-modal';
-import { StatCard } from '@/components/app/stat-card';
 import { useApiMutation } from '@/hooks/use-api-mutation';
-import { addDaysISO, formatDate, formatMoney, formatNumber, todayISO } from '@/lib/format';
+import { formatDate, formatMoney, formatMonth, formatNumber, monthRange } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import type { SewingPayment } from '@/db/schema';
 import {
   deleteSewingEntry,
@@ -34,108 +27,166 @@ import {
   lastPricesQuery,
   sewingEntriesQuery,
   sewingModelsQuery,
+  sewingMonthlyQuery,
   sewingPaymentsQuery,
   sewingSummaryQuery,
   sewingWorkersQuery,
+  type MonthPerson,
   type SewingEntryRow,
-  type SewingSummary
+  type SewingModelRow,
+  type SewingMonth,
+  type SewingWorkerRow
 } from './api';
 import { QuickEntry } from './quick-entry';
 import { SewingEntrySheet, SewingPaymentSheet } from './sewing-forms';
 import { SEWING_ROLES } from './schema';
 
-const chartConfig = {
-  pieces: { label: 'Eu', color: 'var(--chart-1)' },
-  teamPieces: { label: 'Equipe', color: 'var(--chart-2)' }
-} satisfies ChartConfig;
+const roleLabel = (role: string | null) =>
+  role ? (SEWING_ROLES.find((r) => r.value === role)?.label ?? role) : 'overlock / interlock';
 
-function ProductionChart({ summary }: { summary: SewingSummary }) {
-  // Últimos 30 dias, inclusive os sem produção.
-  const data = useMemo(() => {
-    const map = new Map(summary.series.map((s) => [s.date, s]));
-    const today = todayISO();
-    return Array.from({ length: 30 }, (_, i) => {
-      const date = addDaysISO(today, i - 29);
-      const s = map.get(date);
-      return { date, pieces: s?.pieces ?? 0, teamPieces: s?.teamPieces ?? 0, value: s?.value ?? 0 };
-    });
-  }, [summary.series]);
-
+/** Quadro de uma pessoa no mês: modelo × quantidade × valor. */
+function PersonBlock({ person }: { person: MonthPerson }) {
+  const isMe = person.workerId === null;
   return (
-    <ChartContainer config={chartConfig} className='aspect-auto h-48 w-full'>
-      <BarChart data={data} margin={{ left: 0, right: 0 }}>
-        <CartesianGrid vertical={false} />
-        <XAxis
-          dataKey='date'
-          tickLine={false}
-          axisLine={false}
-          tickMargin={8}
-          minTickGap={24}
-          tickFormatter={(d) => formatDate(d, { day: '2-digit', month: '2-digit' })}
-        />
-        <ChartTooltip
-          cursor={false}
-          content={
-            <ChartTooltipContent
-              labelFormatter={(_, payload) => {
-                const p = payload?.[0]?.payload as { date: string; value: number } | undefined;
-                return p
-                  ? `${formatDate(p.date, { weekday: 'short', day: '2-digit', month: '2-digit' })} · ${formatMoney(p.value)}`
-                  : '';
-              }}
-            />
-          }
-        />
-        <Bar dataKey='pieces' stackId='a' fill='var(--color-pieces)' />
-        <Bar
-          dataKey='teamPieces'
-          stackId='a'
-          fill='var(--color-teamPieces)'
-          radius={[4, 4, 0, 0]}
-        />
-      </BarChart>
-    </ChartContainer>
+    <div className={cn('rounded-lg border p-3', isMe && 'border-primary/40 bg-primary/5')}>
+      <div className='mb-2 flex items-baseline justify-between gap-2'>
+        <div className='min-w-0 truncate'>
+          <span className={cn('font-semibold', isMe ? 'text-primary' : 'text-chart-2')}>
+            {person.name}
+          </span>{' '}
+          <span className='text-muted-foreground text-xs'>· {roleLabel(person.role)}</span>
+        </div>
+      </div>
+      <table className='w-full text-sm'>
+        <thead>
+          <tr className='text-muted-foreground text-xs'>
+            <th className='pb-1 text-left font-medium'>Peça</th>
+            <th className='pb-1 text-right font-medium'>Quantidade</th>
+            <th className='pb-1 text-right font-medium'>Valor</th>
+          </tr>
+        </thead>
+        <tbody className='tabular-nums'>
+          {person.models.map((m) => (
+            <tr key={m.modelId} className='border-t'>
+              <td className='py-1'>{m.name}</td>
+              <td className='py-1 text-right'>{formatNumber(m.pieces)}</td>
+              <td className='py-1 text-right'>{formatMoney(m.value)}</td>
+            </tr>
+          ))}
+          <tr className='border-t font-semibold'>
+            <td className='pt-1.5'>Total</td>
+            <td className='pt-1.5 text-right'>{formatNumber(person.pieces)}</td>
+            <td className={cn('pt-1.5 text-right', isMe && 'text-primary')}>
+              {formatMoney(person.value)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 }
 
-type DayGroup = {
-  date: string;
-  mine: number;
-  mineValue: number;
-  team: number;
-  items: SewingEntryRow[];
-};
+/** Lançamentos do mês (para editar/excluir), carregados só quando abertos. */
+function MonthEntries({
+  month,
+  onEdit,
+  onDelete
+}: {
+  month: string;
+  onEdit: (e: SewingEntryRow) => void;
+  onDelete: (e: SewingEntryRow) => void;
+}) {
+  const { from, to } = monthRange(month);
+  const { data, isLoading } = useQuery(sewingEntriesQuery({ from, to }));
+  if (isLoading || !data) return <Skeleton className='h-24 w-full' />;
+  return (
+    <ul className='divide-y rounded-lg border px-3'>
+      {data.map((e) => (
+        <li key={e.id} className='flex items-center gap-2 py-1.5 text-sm'>
+          <span className='text-muted-foreground w-12 shrink-0 text-xs tabular-nums'>
+            {formatDate(e.date, { day: '2-digit', month: '2-digit' })}
+          </span>
+          <span className='min-w-0 flex-1 truncate'>
+            <span className={e.workerId ? 'text-chart-2 font-medium' : 'text-primary font-medium'}>
+              {e.workerName ?? 'Eu'}
+            </span>{' '}
+            · {e.modelName}
+            {e.notes && <span className='text-muted-foreground'> — {e.notes}</span>}
+          </span>
+          <span className='shrink-0 tabular-nums'>
+            {formatNumber(e.quantity)} × {formatMoney(e.unitPrice)}
+          </span>
+          <Button variant='ghost' size='icon-sm' onClick={() => onEdit(e)} aria-label='Editar'>
+            <Icons.edit />
+          </Button>
+          <Button variant='ghost' size='icon-sm' onClick={() => onDelete(e)} aria-label='Excluir'>
+            <Icons.trash />
+          </Button>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
-function groupByDate(entries: SewingEntryRow[]) {
-  const groups: DayGroup[] = [];
-  for (const e of entries) {
-    let g = groups.find((x) => x.date === e.date);
-    if (!g) {
-      g = { date: e.date, mine: 0, mineValue: 0, team: 0, items: [] };
-      groups.push(g);
-    }
-    g.items.push(e);
-    if (e.workerId) g.team += e.quantity;
-    else {
-      g.mine += e.quantity;
-      g.mineValue += e.total;
-    }
-  }
-  return groups;
+function MonthBox({
+  data,
+  onEdit,
+  onDelete
+}: {
+  data: SewingMonth;
+  onEdit: (e: SewingEntryRow) => void;
+  onDelete: (e: SewingEntryRow) => void;
+}) {
+  const [showEntries, setShowEntries] = useState(false);
+  const me = data.people.find((p) => p.workerId === null);
+  const team = data.people.filter((p) => p.workerId !== null);
+  const teamPieces = team.reduce((s, p) => s + p.pieces, 0);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className='text-lg'>{formatMonth(data.month)}</CardTitle>
+        <CardDescription>
+          {me ? (
+            <>
+              Eu: {formatNumber(me.pieces)} peças ·{' '}
+              <span className='text-primary font-medium'>{formatMoney(me.value)}</span>
+            </>
+          ) : (
+            'Sem produção minha'
+          )}
+          {team.length > 0 && ` · Equipe: ${formatNumber(teamPieces)} peças`}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='space-y-3'>
+        <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+          {data.people.map((p) => (
+            <PersonBlock key={p.workerId ?? 'eu'} person={p} />
+          ))}
+        </div>
+        <Button
+          variant='ghost'
+          size='sm'
+          className='w-full'
+          onClick={() => setShowEntries((v) => !v)}
+          aria-expanded={showEntries}
+        >
+          {showEntries ? 'Ocultar lançamentos' : `Ver / editar lançamentos (${data.entries})`}
+          <Icons.chevronDown className={cn('transition-transform', showEntries && 'rotate-180')} />
+        </Button>
+        {showEntries && <MonthEntries month={data.month} onEdit={onEdit} onDelete={onDelete} />}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function SewingPage() {
   const { data: models = [], isLoading: loadingModels } = useQuery(sewingModelsQuery());
-  const { data: summary, isLoading: loadingSummary } = useQuery(sewingSummaryQuery());
-  const [range, setRange] = useState(30);
-  const { data: entries } = useQuery(
-    sewingEntriesQuery({ from: addDaysISO(todayISO(), -range), to: todayISO() })
-  );
-  const { data: payments } = useQuery(sewingPaymentsQuery());
   const { data: workers = [], isLoading: loadingWorkers } = useQuery(sewingWorkersQuery());
   const { data: prices } = useQuery(lastPricesQuery());
-  const teamActive = workers.filter((w) => w.active || w.monthPieces > 0);
-  const teamMonth = teamActive.reduce((s, w) => s + w.monthPieces, 0);
+  const { data: summary, isLoading: loadingSummary } = useQuery(sewingSummaryQuery());
+  const { data: months, isLoading: loadingMonths } = useQuery(sewingMonthlyQuery());
+  const { data: payments } = useQuery(sewingPaymentsQuery());
 
   const [editingEntry, setEditingEntry] = useState<SewingEntryRow | null>(null);
   const [deletingEntry, setDeletingEntry] = useState<SewingEntryRow | null>(null);
@@ -152,14 +203,10 @@ export default function SewingPage() {
     onSuccess: () => setDeletingPayment(null)
   });
 
-  const groups = useMemo(() => groupByDate(entries ?? []), [entries]);
-  const avgPerDay =
-    summary && summary.month.days > 0 ? summary.month.pieces / summary.month.days : 0;
-
   return (
     <PageContainer
       pageTitle='Costura'
-      pageDescription='Sua produção e a da equipe na oficina, e quanto você tem a receber.'
+      pageDescription='Produção por mês — você e cada retista, por tipo de peça.'
       pageHeaderAction={
         <div className='flex gap-2'>
           <Button
@@ -180,229 +227,63 @@ export default function SewingPage() {
       }
     >
       <div className='grid gap-4 lg:grid-cols-5'>
-        <div className='space-y-4 lg:col-span-2'>
+        <div className='lg:col-span-3'>
           {loadingModels || loadingWorkers ? (
             <Skeleton className='h-80 w-full' />
           ) : (
             <QuickEntry models={models} workers={workers} prices={prices} />
           )}
+        </div>
 
-          <Card className='bg-primary/5 border-primary/30'>
-            <CardHeader>
-              <CardDescription>A receber da oficina (minha produção)</CardDescription>
-              <CardTitle className='text-primary text-3xl tabular-nums'>
-                {loadingSummary ? <Skeleton className='h-9 w-36' /> : formatMoney(summary?.balance)}
-              </CardTitle>
-              <CardAction>
-                <Button
-                  size='sm'
-                  onClick={() => {
-                    setEditingPayment(null);
-                    setPaymentOpen(true);
-                  }}
-                >
-                  <Icons.cash /> Recebi
-                </Button>
-              </CardAction>
-            </CardHeader>
-            <CardContent className='text-muted-foreground space-y-0.5 text-xs'>
+        <Card className='bg-primary/5 border-primary/30 lg:col-span-2 lg:self-start'>
+          <CardHeader>
+            <CardDescription>A receber da oficina (minha produção)</CardDescription>
+            <CardTitle className='text-primary text-3xl tabular-nums'>
+              {loadingSummary ? <Skeleton className='h-9 w-36' /> : formatMoney(summary?.balance)}
+            </CardTitle>
+            <CardAction>
+              <Button
+                size='sm'
+                onClick={() => {
+                  setEditingPayment(null);
+                  setPaymentOpen(true);
+                }}
+              >
+                <Icons.cash /> Recebi
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent className='text-muted-foreground space-y-0.5 text-xs'>
+            <div>
+              Produzido no total: {formatMoney(summary?.produced)} · já recebido:{' '}
+              {formatMoney(summary?.paid)}
+            </div>
+            {summary?.lastPayment && (
               <div>
-                Produzido no total: {formatMoney(summary?.produced)} · já recebido:{' '}
-                {formatMoney(summary?.paid)}
+                Último pagamento: {formatMoney(summary.lastPayment.amount)} em{' '}
+                {formatDate(summary.lastPayment.date)}
               </div>
-              {summary?.lastPayment && (
-                <div>
-                  Último pagamento: {formatMoney(summary.lastPayment.amount)} em{' '}
-                  {formatDate(summary.lastPayment.date)}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className='space-y-4 lg:col-span-3'>
-          <h2 className='text-muted-foreground text-sm font-medium'>Minha produção</h2>
-          <div className='-mt-2 grid grid-cols-2 gap-3'>
-            <StatCard
-              label='Hoje'
-              value={`${formatNumber(summary?.today.pieces)} pç`}
-              hint={formatMoney(summary?.today.value)}
-              loading={loadingSummary}
-            />
-            <StatCard
-              label='Semana'
-              value={`${formatNumber(summary?.week.pieces)} pç`}
-              hint={formatMoney(summary?.week.value)}
-              loading={loadingSummary}
-            />
-            <StatCard
-              label='Mês'
-              value={`${formatNumber(summary?.month.pieces)} pç`}
-              hint={formatMoney(summary?.month.value)}
-              tone='positive'
-              loading={loadingSummary}
-            />
-            <StatCard
-              label='Média/dia (mês)'
-              value={`${formatNumber(Math.round(avgPerDay))} pç`}
-              hint={`${summary?.month.days ?? 0} dia(s) trabalhado(s)`}
-              loading={loadingSummary}
-            />
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Equipe este mês</CardTitle>
-              <CardDescription>
-                {formatNumber(teamMonth)} peças · a oficina paga direto a cada um
-              </CardDescription>
-              <CardAction>
-                <Button
-                  variant='ghost'
-                  size='sm'
-                  render={<Link href='/dashboard/costura/equipe' />}
-                >
-                  {teamActive.length ? 'Ver equipe' : 'Adicionar'}
-                </Button>
-              </CardAction>
-            </CardHeader>
-            <CardContent className='space-y-2'>
-              {teamActive.length === 0 && (
-                <p className='text-muted-foreground text-sm'>
-                  Cadastre os retistas para lançar a produção de cada um.
-                </p>
-              )}
-              {teamActive.map((w) => (
-                <div key={w.id} className='flex items-center justify-between gap-2 text-sm'>
-                  <span className='min-w-0 truncate'>
-                    {w.name}{' '}
-                    <span className='text-muted-foreground text-xs'>
-                      · {SEWING_ROLES.find((r) => r.value === w.role)?.label ?? w.role}
-                    </span>
-                  </span>
-                  <span className='text-muted-foreground shrink-0 tabular-nums'>
-                    hoje {formatNumber(w.todayPieces)} · mês{' '}
-                    <span className='text-foreground font-medium'>
-                      {formatNumber(w.monthPieces)} pç
-                    </span>
-                  </span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Peças por dia</CardTitle>
-              <CardDescription>Últimos 30 dias — você e a equipe</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {summary ? (
-                <ProductionChart summary={summary} />
-              ) : (
-                <Skeleton className='h-48 w-full' />
-              )}
-            </CardContent>
-          </Card>
-
-          {summary && summary.byModel.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Minhas peças no mês por modelo</CardTitle>
-              </CardHeader>
-              <CardContent className='space-y-2'>
-                {summary.byModel.map((m) => (
-                  <div key={m.id} className='flex items-center justify-between gap-2 text-sm'>
-                    <span className='truncate'>{m.name}</span>
-                    <span className='text-muted-foreground shrink-0 tabular-nums'>
-                      {formatNumber(m.pieces)} pç ·{' '}
-                      <span className='text-foreground'>{formatMoney(m.value)}</span>
-                    </span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-        </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs defaultValue='producao' className='mt-6'>
         <TabsList>
-          <TabsTrigger value='producao'>Produção</TabsTrigger>
+          <TabsTrigger value='producao'>Produção por mês</TabsTrigger>
           <TabsTrigger value='pagamentos'>Pagamentos</TabsTrigger>
         </TabsList>
 
-        <TabsContent value='producao' className='space-y-3'>
-          {groups.length === 0 && (
+        <TabsContent value='producao' className='space-y-4'>
+          {loadingMonths && <Skeleton className='h-60 w-full' />}
+          {months && months.length === 0 && (
             <p className='text-muted-foreground py-6 text-center text-sm'>
-              Nenhuma produção nos últimos {range} dias.
+              Nenhuma produção lançada ainda.
             </p>
           )}
-          {groups.map((g) => (
-            <Card key={g.date} className='gap-2 py-3'>
-              <div className='flex items-center justify-between px-4'>
-                <div className='text-sm font-semibold capitalize'>
-                  {formatDate(g.date, { weekday: 'long', day: '2-digit', month: '2-digit' })}
-                </div>
-                <div className='text-muted-foreground text-right text-xs tabular-nums sm:text-sm'>
-                  {g.mine > 0 && (
-                    <div>
-                      Eu {formatNumber(g.mine)} pç ·{' '}
-                      <span className='text-foreground font-medium'>
-                        {formatMoney(g.mineValue)}
-                      </span>
-                    </div>
-                  )}
-                  {g.team > 0 && <div>Equipe {formatNumber(g.team)} pç</div>}
-                </div>
-              </div>
-              <ul className='divide-y px-4'>
-                {g.items.map((e) => (
-                  <li key={e.id} className='flex items-center gap-2 py-1.5 text-sm'>
-                    <span className='min-w-0 flex-1 truncate'>
-                      <span
-                        className={
-                          e.workerId ? 'text-chart-2 font-medium' : 'text-primary font-medium'
-                        }
-                      >
-                        {e.workerName ?? 'Eu'}
-                      </span>{' '}
-                      · {e.modelName}
-                      {e.notes && <span className='text-muted-foreground'> — {e.notes}</span>}
-                    </span>
-                    <span className='tabular-nums'>
-                      {e.quantity} × {formatMoney(e.unitPrice)}
-                    </span>
-                    <Button
-                      variant='ghost'
-                      size='icon-sm'
-                      onClick={() => setEditingEntry(e)}
-                      aria-label='Editar'
-                    >
-                      <Icons.edit />
-                    </Button>
-                    <Button
-                      variant='ghost'
-                      size='icon-sm'
-                      onClick={() => setDeletingEntry(e)}
-                      aria-label='Excluir'
-                    >
-                      <Icons.trash />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </Card>
+          {months?.map((m) => (
+            <MonthBox key={m.month} data={m} onEdit={setEditingEntry} onDelete={setDeletingEntry} />
           ))}
-          {range < 365 && (entries?.length ?? 0) > 0 && (
-            <Button
-              variant='ghost'
-              className='w-full'
-              onClick={() => setRange((r) => (r === 30 ? 90 : 365))}
-            >
-              Ver mais antigos
-            </Button>
-          )}
         </TabsContent>
 
         <TabsContent value='pagamentos' className='space-y-2'>
@@ -451,8 +332,8 @@ export default function SewingPage() {
         <SewingEntrySheet
           key={editingEntry.id}
           entry={editingEntry}
-          models={models}
-          workers={workers}
+          models={models as SewingModelRow[]}
+          workers={workers as SewingWorkerRow[]}
           open
           onOpenChange={(o) => !o && setEditingEntry(null)}
         />

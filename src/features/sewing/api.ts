@@ -71,6 +71,23 @@ export function suggestedPrice(
   return last?.unitPrice ?? model.pricePerPiece;
 }
 
+export type MonthModelLine = { modelId: number; name: string; pieces: number; value: number };
+export type MonthPerson = {
+  workerId: number | null;
+  name: string;
+  role: string | null;
+  pieces: number;
+  value: number;
+  models: MonthModelLine[];
+};
+export type SewingMonth = { month: string; entries: number; people: MonthPerson[] };
+
+export const sewingMonthlyQuery = () =>
+  queryOptions({
+    queryKey: ['sewing', 'monthly'],
+    queryFn: () => api.get<SewingMonth[]>('/costura/mensal')
+  });
+
 export const sewingPaymentsQuery = () =>
   queryOptions({
     queryKey: ['sewing', 'payments'],
