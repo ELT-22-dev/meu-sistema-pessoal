@@ -78,9 +78,9 @@ function KindTag({ kind }: { kind: string }) {
 
 function balanceLabel(balance: number, month: string) {
   const next = formatMonth(shiftMonth(month, 1)).toLowerCase();
-  if (balance > 0) return `Falta receber (passa para ${next})`;
-  if (balance < 0) return `Recebido a mais (desconta em ${next})`;
-  return 'Mês acertado';
+  if (balance > 0) return { title: 'Falta receber', hint: `passa para ${next}` };
+  if (balance < 0) return { title: 'Recebido a mais', hint: `desconta em ${next}` };
+  return { title: 'Mês acertado', hint: null };
 }
 
 const moneyTone = (v: number) => cn(v > 0 && 'text-primary', v < 0 && 'text-destructive');
@@ -97,8 +97,9 @@ function MonthLedger({
   onEditPayment: (p: MonthPayment) => void;
   onDeletePayment: (p: MonthPayment) => void;
 }) {
+  const label = balanceLabel(data.balance, data.month);
   return (
-    <div className='rounded-lg border p-3'>
+    <div className='panel-3d rounded-lg border p-3'>
       <div className='mb-2 flex items-center justify-between gap-2'>
         <span className='font-semibold'>Meu acerto do mês</span>
         <Button
@@ -132,7 +133,7 @@ function MonthLedger({
             </tr>
           )}
           <tr className={cn(data.previousBalance !== 0 && 'border-t')}>
-            <td className='py-1'>Minha produção</td>
+            <td className='py-1'>Produção do mês</td>
             <td className='py-1 text-right whitespace-nowrap'>+ {formatMoney(data.produced)}</td>
             <td aria-hidden='true' className='w-16' />
           </tr>
@@ -176,8 +177,18 @@ function MonthLedger({
             </tr>
           )}
           <tr className='border-t font-semibold'>
-            <td className='pt-1.5'>{balanceLabel(data.balance, data.month)}</td>
-            <td className={cn('pt-1.5 text-right whitespace-nowrap', moneyTone(data.balance))}>
+            <td className='pt-1.5'>
+              {label.title}
+              {label.hint && (
+                <div className='text-muted-foreground text-xs font-normal'>{label.hint}</div>
+              )}
+            </td>
+            <td
+              className={cn(
+                'pt-1.5 text-right align-top whitespace-nowrap',
+                moneyTone(data.balance)
+              )}
+            >
               {formatMoney(data.balance)}
             </td>
             <td aria-hidden='true' className='w-16' />
@@ -195,13 +206,17 @@ const roleLabel = (role: string | null) =>
 function PersonBlock({ person }: { person: MonthPerson }) {
   const isMe = person.workerId === null;
   return (
-    <div className={cn('rounded-lg border p-3', isMe && 'border-primary/40 bg-primary/5')}>
+    <div className={cn('panel-3d rounded-lg border p-3', isMe && 'border-primary/40 bg-primary/5')}>
       <div className='mb-2 flex items-baseline justify-between gap-2'>
         <div className='min-w-0 truncate'>
-          <span className={cn('font-semibold', isMe ? 'text-primary' : 'text-chart-2')}>
-            {person.name}
-          </span>{' '}
-          <span className='text-muted-foreground text-xs'>· {roleLabel(person.role)}</span>
+          {isMe ? (
+            <span className='text-primary font-semibold'>Minha produção</span>
+          ) : (
+            <>
+              <span className='text-chart-2 font-semibold'>{person.name}</span>{' '}
+              <span className='text-muted-foreground text-xs'>· {roleLabel(person.role)}</span>
+            </>
+          )}
         </div>
       </div>
       <table className='w-full text-sm'>
@@ -304,11 +319,11 @@ function MonthBox({
         <CardDescription>
           {me ? (
             <>
-              Eu: {formatNumber(me.pieces)} peças ·{' '}
+              {formatNumber(me.pieces)} peças ·{' '}
               <span className='text-primary font-medium'>{formatMoney(me.value)}</span>
             </>
           ) : (
-            'Sem produção minha'
+            'Sem produção lançada ainda'
           )}
         </CardDescription>
         <CardAction className='text-right'>
@@ -319,14 +334,15 @@ function MonthBox({
         </CardAction>
       </CardHeader>
       <CardContent className='space-y-3'>
-        <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+        {/* Ordem da conta: o que produzi → o que recebi → o saldo. */}
+        <div className='grid items-start gap-3 md:grid-cols-2'>
+          {me && <PersonBlock person={me} />}
           <MonthLedger
             data={data}
             onAddPayment={onAddPayment}
             onEditPayment={onEditPayment}
             onDeletePayment={onDeletePayment}
           />
-          {me && <PersonBlock person={me} />}
         </div>
         {team.length > 0 && (
           <Button
