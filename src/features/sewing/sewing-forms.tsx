@@ -4,7 +4,7 @@ import { FieldGroup } from '@/components/ui/field';
 import { FormSheet } from '@/components/app/form-sheet';
 import { useApiMutation } from '@/hooks/use-api-mutation';
 import { useAppForm } from '@/lib/form';
-import { addDaysISO, todayISO } from '@/lib/format';
+import { currentMonth, formatMonth, shiftMonth, todayISO } from '@/lib/format';
 import type { SewingModel, SewingPayment, SewingWorker } from '@/db/schema';
 import {
   saveSewingEntry,
@@ -20,8 +20,10 @@ import {
   sewingModelSchema,
   sewingPaymentSchema,
   sewingWorkerSchema,
+  SEWING_PAYMENT_KINDS,
   SEWING_ROLES,
   type SewingEntryInput,
+  type SewingPaymentKind,
   type SewingModelInput,
   type SewingPaymentInput,
   type SewingWorkerInput
@@ -223,30 +225,47 @@ export function SewingEntrySheet({
   );
 }
 
-// ---------------- Pagamento da oficina ----------------
+// ---------------- Pagamento / adiantamento / vale da oficina ----------------
+
+/** Últimos 12 meses + o próximo (e o mês já gravado, se estiver fora disso). */
+function monthOptions(selected?: string) {
+  const now = currentMonth();
+  const list = Array.from({ length: 14 }, (_, i) => shiftMonth(now, 1 - i));
+  if (selected && !list.includes(selected)) list.push(selected);
+  return list.sort((x, y) => y.localeCompare(x)).map((m) => ({ value: m, label: formatMonth(m) }));
+}
+
+export type PaymentFormValues = Pick<
+  SewingPayment,
+  'id' | 'kind' | 'month' | 'date' | 'amount' | 'notes'
+>;
 
 export function SewingPaymentSheet({
   payment,
-  balance,
-  lastPaymentDate,
+  month,
+  kind,
+  amount,
   open,
   onOpenChange
 }: SheetProps & {
-  payment?: SewingPayment | null;
-  balance: number;
-  lastPaymentDate?: string | null;
+  payment?: PaymentFormValues | null;
+  /** Mês já escolhido (ao abrir pelo quadro do mês). */
+  month?: string;
+  kind?: SewingPaymentKind;
+  /** Valor sugerido (ex.: o saldo do mês). */
+  amount?: number;
 }) {
   const isEdit = !!payment;
   const mutation = useApiMutation(saveSewingPayment, {
-    success: isEdit ? 'Pagamento atualizado' : 'Pagamento registrado',
+    success: isEdit ? 'Anotação atualizada' : 'Anotado no mês',
     onSuccess: () => onOpenChange(false)
   });
   const form = useAppForm({
     defaultValues: {
+      kind: (payment?.kind as SewingPaymentKind) ?? kind ?? 'pagamento',
+      month: payment?.month ?? month ?? currentMonth(),
       date: payment?.date ?? todayISO(),
-      amount: payment?.amount ?? (balance > 0 ? balance : undefined),
-      periodStart: payment?.periodStart ?? (lastPaymentDate ? addDaysISO(lastPaymentDate, 1) : ''),
-      periodEnd: payment?.periodEnd ?? (isEdit ? '' : todayISO()),
+      amount: payment?.amount ?? (amount && amount > 0 ? amount : undefined),
       notes: payment?.notes ?? ''
     } as SewingPaymentInput,
     validators: { onSubmit: sewingPaymentSchema },
@@ -259,8 +278,8 @@ export function SewingPaymentSheet({
     <FormSheet
       open={open}
       onOpenChange={onOpenChange}
-      title={isEdit ? 'Editar pagamento' : 'Pagamento da oficina'}
-      description='Entra como receita da Costura no financeiro e abate do saldo a receber.'
+      title={isEdit ? 'Editar anotação' : 'Anotar recebimento da oficina'}
+      description='Pagamento, adiantamento ou vale: abate do saldo do mês escolhido (o que sobrar passa para o mês seguinte) e entra como receita da Costura no financeiro.'
       formId='sewing-payment-form'
       loading={mutation.isPending}
     >
@@ -274,10 +293,28 @@ export function SewingPaymentSheet({
         <FieldGroup>
           <div className='grid grid-cols-2 gap-4'>
             <form.AppField
+              name='kind'
+              children={(field) => (
+                <field.SelectField label='Tipo' required options={[...SEWING_PAYMENT_KINDS]} />
+              )}
+            />
+            <form.AppField
+              name='month'
+              children={(field) => (
+                <field.SelectField
+                  label='Mês da produção'
+                  required
+                  options={monthOptions(payment?.month ?? month)}
+                />
+              )}
+            />
+          </div>
+          <div className='grid grid-cols-2 gap-4'>
+            <form.AppField
               name='amount'
               children={(field) => (
                 <field.TextField
-                  label='Valor recebido (R$)'
+                  label='Valor (R$)'
                   required
                   type='number'
                   inputMode='decimal'
@@ -291,20 +328,10 @@ export function SewingPaymentSheet({
               children={(field) => <field.TextField label='Recebido em' required type='date' />}
             />
           </div>
-          <div className='grid grid-cols-2 gap-4'>
-            <form.AppField
-              name='periodStart'
-              children={(field) => <field.TextField label='Referente de' type='date' />}
-            />
-            <form.AppField
-              name='periodEnd'
-              children={(field) => <field.TextField label='até' type='date' />}
-            />
-          </div>
           <form.AppField
             name='notes'
             children={(field) => (
-              <field.TextField label='Observação' placeholder='Ex.: Pix, vale descontado...' />
+              <field.TextField label='Observação' placeholder='Ex.: Pix, dinheiro...' />
             )}
           />
         </FieldGroup>

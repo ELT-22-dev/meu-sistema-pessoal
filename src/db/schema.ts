@@ -149,11 +149,20 @@ export const sewingEntries = pgTable(
   ]
 );
 
-/** Pagamento recebido da oficina. Gera uma receita no financeiro. */
+/**
+ * Dinheiro recebido da oficina (pagamento, adiantamento ou vale), anotado no mês a que se
+ * refere — o saldo de cada mês (produção − recebido) passa para o mês seguinte.
+ * Gera uma receita no financeiro.
+ */
 export const sewingPayments = pgTable('sewing_payments', {
   id: serial('id').primaryKey(),
   date: day('date').notNull(),
   amount: money('amount').notNull(),
+  // pagamento | adiantamento | vale
+  kind: text('kind').notNull().default('pagamento'),
+  // 'YYYY-MM' do mês de produção a que se refere
+  month: text('month').notNull(),
+  // legado: período livre usado antes do acerto por mês
   periodStart: day('period_start'),
   periodEnd: day('period_end'),
   notes: text('notes'),

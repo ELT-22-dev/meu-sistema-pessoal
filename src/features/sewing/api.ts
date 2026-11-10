@@ -80,12 +80,32 @@ export type MonthPerson = {
   value: number;
   models: MonthModelLine[];
 };
-export type SewingMonth = { month: string; entries: number; people: MonthPerson[] };
+export type MonthPayment = {
+  id: number;
+  kind: string;
+  date: string;
+  amount: number;
+  notes: string | null;
+};
+export type SewingMonth = {
+  month: string;
+  entries: number;
+  people: MonthPerson[];
+  /** Saldo que veio do mês anterior (negativo = recebi a mais). */
+  previousBalance: number;
+  /** Minha produção no mês. */
+  produced: number;
+  /** Pagamentos, adiantamentos e vales anotados neste mês. */
+  payments: MonthPayment[];
+  received: number;
+  /** Saldo que passa para o mês seguinte. */
+  balance: number;
+};
 
 export const sewingMonthlyQuery = () =>
   queryOptions({
-    queryKey: ['sewing', 'monthly'],
-    queryFn: () => api.get<SewingMonth[]>('/costura/mensal')
+    queryKey: ['sewing', 'monthly', todayISO()],
+    queryFn: () => api.get<SewingMonth[]>(`/costura/mensal${qs({ today: todayISO() })}`)
   });
 
 export const sewingPaymentsQuery = () =>

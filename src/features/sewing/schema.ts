@@ -1,6 +1,6 @@
 import * as z from 'zod';
-import { formatDate } from '@/lib/format';
-import { optDate, optId, optText, reqDate, reqText } from '@/lib/zod-helpers';
+import { formatMonth } from '@/lib/format';
+import { optId, optText, reqDate, reqText } from '@/lib/zod-helpers';
 
 export const SEWING_ROLES = [
   { value: 'reta', label: 'Reta' },
@@ -46,19 +46,29 @@ export const sewingEntrySchema = z.object({
 
 export type SewingEntryInput = z.input<typeof sewingEntrySchema>;
 
+export const SEWING_PAYMENT_KINDS = [
+  { value: 'pagamento', label: 'Pagamento' },
+  { value: 'adiantamento', label: 'Adiantamento' },
+  { value: 'vale', label: 'Vale' }
+] as const;
+
+export type SewingPaymentKind = (typeof SEWING_PAYMENT_KINDS)[number]['value'];
+
+export const paymentKindLabel = (kind: string) =>
+  SEWING_PAYMENT_KINDS.find((k) => k.value === kind)?.label ?? 'Pagamento';
+
 export const sewingPaymentSchema = z.object({
+  kind: z.enum(['pagamento', 'adiantamento', 'vale']).default('pagamento'),
+  // mês de produção a que o valor se refere
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Escolha o mês'),
   date: reqDate,
   amount: z.number({ error: 'Informe o valor' }).positive('Valor deve ser maior que zero'),
-  periodStart: optDate,
-  periodEnd: optDate,
   notes: optText(500)
 });
 
 export type SewingPaymentInput = z.input<typeof sewingPaymentSchema>;
 
-export function paymentDescription(p: { periodStart: string | null; periodEnd: string | null }) {
-  if (p.periodStart && p.periodEnd) {
-    return `Pagamento da oficina (${formatDate(p.periodStart)} a ${formatDate(p.periodEnd)})`;
-  }
-  return 'Pagamento da oficina';
+/** Descrição da receita no financeiro, ex.: "Adiantamento da oficina — novembro de 2026". */
+export function paymentDescription(p: { kind: string; month: string }) {
+  return `${paymentKindLabel(p.kind)} da oficina — ${formatMonth(p.month).toLowerCase()}`;
 }

@@ -18,9 +18,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Icons } from '@/components/icons';
 import { AlertModal } from '@/components/modal/alert-modal';
 import { useApiMutation } from '@/hooks/use-api-mutation';
-import { formatDate, formatMoney, formatMonth, formatNumber, monthRange } from '@/lib/format';
+import {
+  currentMonth,
+  formatDate,
+  formatMoney,
+  formatMonth,
+  formatNumber,
+  monthRange,
+  shiftMonth
+} from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { SewingPayment } from '@/db/schema';
 import {
   deleteSewingEntry,
   deleteSewingPayment,
@@ -31,6 +38,7 @@ import {
   sewingPaymentsQuery,
   sewingSummaryQuery,
   sewingWorkersQuery,
+  type MonthPayment,
   type MonthPerson,
   type SewingEntryRow,
   type SewingModelRow,
@@ -38,8 +46,147 @@ import {
   type SewingWorkerRow
 } from './api';
 import { QuickEntry } from './quick-entry';
-import { SewingEntrySheet, SewingPaymentSheet } from './sewing-forms';
-import { SEWING_ROLES } from './schema';
+import { SewingEntrySheet, SewingPaymentSheet, type PaymentFormValues } from './sewing-forms';
+import { paymentKindLabel, SEWING_ROLES, type SewingPaymentKind } from './schema';
+
+/** O que abre o formulário de recebimento: uma anotação existente ou valores iniciais. */
+type PaymentSheetState = {
+  payment?: PaymentFormValues;
+  month?: string;
+  kind?: SewingPaymentKind;
+  amount?: number;
+};
+
+const KIND_STYLE: Record<string, string> = {
+  pagamento: 'bg-primary/10 text-primary',
+  adiantamento: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+  vale: 'bg-chart-5/15 text-chart-5'
+};
+
+function KindTag({ kind }: { kind: string }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 rounded px-1.5 py-0.5 text-[11px] leading-none font-medium',
+        KIND_STYLE[kind] ?? KIND_STYLE.pagamento
+      )}
+    >
+      {paymentKindLabel(kind)}
+    </span>
+  );
+}
+
+function balanceLabel(balance: number, month: string) {
+  const next = formatMonth(shiftMonth(month, 1)).toLowerCase();
+  if (balance > 0) return `Falta receber (passa para ${next})`;
+  if (balance < 0) return `Recebido a mais (desconta em ${next})`;
+  return 'Mês acertado';
+}
+
+const moneyTone = (v: number) => cn(v > 0 && 'text-primary', v < 0 && 'text-destructive');
+
+/** Meu acerto com a oficina no mês: saldo anterior + produção − recebimentos = saldo. */
+function MonthLedger({
+  data,
+  onAddPayment,
+  onEditPayment,
+  onDeletePayment
+}: {
+  data: SewingMonth;
+  onAddPayment: (s: PaymentSheetState) => void;
+  onEditPayment: (p: MonthPayment) => void;
+  onDeletePayment: (p: MonthPayment) => void;
+}) {
+  return (
+    <div className='rounded-lg border p-3'>
+      <div className='mb-2 flex items-center justify-between gap-2'>
+        <span className='font-semibold'>Meu acerto do mês</span>
+        <Button
+          size='sm'
+          variant='outline'
+          onClick={() =>
+            onAddPayment({
+              month: data.month,
+              kind: 'pagamento',
+              amount: data.balance > 0 ? data.balance : undefined
+            })
+          }
+        >
+          <Icons.add /> Anotar
+        </Button>
+      </div>
+      <table className='w-full text-sm'>
+        <tbody className='tabular-nums'>
+          {data.previousBalance !== 0 && (
+            <tr>
+              <td className='py-1'>Saldo do mês anterior</td>
+              <td
+                className={cn(
+                  'py-1 text-right whitespace-nowrap',
+                  data.previousBalance < 0 && 'text-destructive'
+                )}
+              >
+                {formatMoney(data.previousBalance)}
+              </td>
+              <td aria-hidden='true' className='w-16' />
+            </tr>
+          )}
+          <tr className={cn(data.previousBalance !== 0 && 'border-t')}>
+            <td className='py-1'>Minha produção</td>
+            <td className='py-1 text-right whitespace-nowrap'>+ {formatMoney(data.produced)}</td>
+            <td aria-hidden='true' className='w-16' />
+          </tr>
+          {data.payments.map((p) => (
+            <tr key={p.id} className='border-t'>
+              <td className='max-w-0 py-1'>
+                <div className='flex min-w-0 items-center gap-1.5'>
+                  <KindTag kind={p.kind} />
+                  <span className='text-muted-foreground min-w-0 truncate text-xs'>
+                    {formatDate(p.date, { day: '2-digit', month: '2-digit' })}
+                    {p.notes && ` · ${p.notes}`}
+                  </span>
+                </div>
+              </td>
+              <td className='py-1 text-right whitespace-nowrap'>− {formatMoney(p.amount)}</td>
+              <td className='w-16 py-0.5 text-right whitespace-nowrap'>
+                <Button
+                  variant='ghost'
+                  size='icon-sm'
+                  onClick={() => onEditPayment(p)}
+                  aria-label='Editar'
+                >
+                  <Icons.edit />
+                </Button>
+                <Button
+                  variant='ghost'
+                  size='icon-sm'
+                  onClick={() => onDeletePayment(p)}
+                  aria-label='Excluir'
+                >
+                  <Icons.trash />
+                </Button>
+              </td>
+            </tr>
+          ))}
+          {data.payments.length === 0 && (
+            <tr className='border-t'>
+              <td colSpan={3} className='text-muted-foreground py-1.5 text-xs'>
+                Nenhum pagamento, adiantamento ou vale anotado neste mês.
+              </td>
+            </tr>
+          )}
+          <tr className='border-t font-semibold'>
+            <td className='pt-1.5'>{balanceLabel(data.balance, data.month)}</td>
+            <td className={cn('pt-1.5 text-right whitespace-nowrap', moneyTone(data.balance))}>
+              {formatMoney(data.balance)}
+            </td>
+            <td aria-hidden='true' className='w-16' />
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 const roleLabel = (role: string | null) =>
   role ? (SEWING_ROLES.find((r) => r.value === role)?.label ?? role) : 'overlock / interlock';
@@ -131,11 +278,17 @@ function MonthEntries({
 function MonthBox({
   data,
   onEdit,
-  onDelete
+  onDelete,
+  onAddPayment,
+  onEditPayment,
+  onDeletePayment
 }: {
   data: SewingMonth;
   onEdit: (e: SewingEntryRow) => void;
   onDelete: (e: SewingEntryRow) => void;
+  onAddPayment: (s: PaymentSheetState) => void;
+  onEditPayment: (p: MonthPayment) => void;
+  onDeletePayment: (p: MonthPayment) => void;
 }) {
   const [showEntries, setShowEntries] = useState(false);
   const me = data.people.find((p) => p.workerId === null);
@@ -157,23 +310,39 @@ function MonthBox({
           )}
           {team.length > 0 && ` · Equipe: ${formatNumber(teamPieces)} peças`}
         </CardDescription>
+        <CardAction className='text-right'>
+          <div className='text-muted-foreground text-xs'>Saldo</div>
+          <div className={cn('font-semibold tabular-nums', moneyTone(data.balance))}>
+            {formatMoney(data.balance)}
+          </div>
+        </CardAction>
       </CardHeader>
       <CardContent className='space-y-3'>
         <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+          <MonthLedger
+            data={data}
+            onAddPayment={onAddPayment}
+            onEditPayment={onEditPayment}
+            onDeletePayment={onDeletePayment}
+          />
           {data.people.map((p) => (
             <PersonBlock key={p.workerId ?? 'eu'} person={p} />
           ))}
         </div>
-        <Button
-          variant='ghost'
-          size='sm'
-          className='w-full'
-          onClick={() => setShowEntries((v) => !v)}
-          aria-expanded={showEntries}
-        >
-          {showEntries ? 'Ocultar lançamentos' : `Ver / editar lançamentos (${data.entries})`}
-          <Icons.chevronDown className={cn('transition-transform', showEntries && 'rotate-180')} />
-        </Button>
+        {data.entries > 0 && (
+          <Button
+            variant='ghost'
+            size='sm'
+            className='w-full'
+            onClick={() => setShowEntries((v) => !v)}
+            aria-expanded={showEntries}
+          >
+            {showEntries ? 'Ocultar lançamentos' : `Ver / editar lançamentos (${data.entries})`}
+            <Icons.chevronDown
+              className={cn('transition-transform', showEntries && 'rotate-180')}
+            />
+          </Button>
+        )}
         {showEntries && <MonthEntries month={data.month} onEdit={onEdit} onDelete={onDelete} />}
       </CardContent>
     </Card>
@@ -190,16 +359,15 @@ export default function SewingPage() {
 
   const [editingEntry, setEditingEntry] = useState<SewingEntryRow | null>(null);
   const [deletingEntry, setDeletingEntry] = useState<SewingEntryRow | null>(null);
-  const [paymentOpen, setPaymentOpen] = useState(false);
-  const [editingPayment, setEditingPayment] = useState<SewingPayment | null>(null);
-  const [deletingPayment, setDeletingPayment] = useState<SewingPayment | null>(null);
+  const [paymentSheet, setPaymentSheet] = useState<PaymentSheetState | null>(null);
+  const [deletingPayment, setDeletingPayment] = useState<{ id: number } | null>(null);
 
   const removeEntry = useApiMutation(deleteSewingEntry, {
     success: 'Lançamento excluído',
     onSuccess: () => setDeletingEntry(null)
   });
   const removePayment = useApiMutation(deleteSewingPayment, {
-    success: 'Pagamento excluído',
+    success: 'Anotação excluída',
     onSuccess: () => setDeletingPayment(null)
   });
 
@@ -244,10 +412,13 @@ export default function SewingPage() {
             <CardAction>
               <Button
                 size='sm'
-                onClick={() => {
-                  setEditingPayment(null);
-                  setPaymentOpen(true);
-                }}
+                onClick={() =>
+                  setPaymentSheet({
+                    month: currentMonth(),
+                    kind: 'pagamento',
+                    amount: summary?.balance
+                  })
+                }
               >
                 <Icons.cash /> Recebi
               </Button>
@@ -260,7 +431,7 @@ export default function SewingPage() {
             </div>
             {summary?.lastPayment && (
               <div>
-                Último pagamento: {formatMoney(summary.lastPayment.amount)} em{' '}
+                Último recebimento: {formatMoney(summary.lastPayment.amount)} em{' '}
                 {formatDate(summary.lastPayment.date)}
               </div>
             )}
@@ -271,7 +442,7 @@ export default function SewingPage() {
       <Tabs defaultValue='producao' className='mt-6'>
         <TabsList>
           <TabsTrigger value='producao'>Produção por mês</TabsTrigger>
-          <TabsTrigger value='pagamentos'>Pagamentos</TabsTrigger>
+          <TabsTrigger value='pagamentos'>Recebimentos</TabsTrigger>
         </TabsList>
 
         <TabsContent value='producao' className='space-y-4'>
@@ -282,35 +453,40 @@ export default function SewingPage() {
             </p>
           )}
           {months?.map((m) => (
-            <MonthBox key={m.month} data={m} onEdit={setEditingEntry} onDelete={setDeletingEntry} />
+            <MonthBox
+              key={m.month}
+              data={m}
+              onEdit={setEditingEntry}
+              onDelete={setDeletingEntry}
+              onAddPayment={setPaymentSheet}
+              onEditPayment={(p) => setPaymentSheet({ payment: { ...p, month: m.month } })}
+              onDeletePayment={setDeletingPayment}
+            />
           ))}
         </TabsContent>
 
         <TabsContent value='pagamentos' className='space-y-2'>
           {(payments ?? []).length === 0 && (
             <p className='text-muted-foreground py-6 text-center text-sm'>
-              Nenhum pagamento registrado ainda.
+              Nenhum pagamento, adiantamento ou vale anotado ainda.
             </p>
           )}
           {(payments ?? []).map((p) => (
             <Card key={p.id} className='flex-row items-center gap-3 px-4 py-3'>
               <div className='min-w-0 flex-1'>
-                <div className='font-medium tabular-nums'>{formatMoney(p.amount)}</div>
-                <div className='text-muted-foreground text-xs'>
-                  Recebido em {formatDate(p.date)}
-                  {p.periodStart &&
-                    p.periodEnd &&
-                    ` · ref. ${formatDate(p.periodStart)} a ${formatDate(p.periodEnd)}`}
+                <div className='flex items-center gap-2'>
+                  <KindTag kind={p.kind} />
+                  <span className='font-medium tabular-nums'>{formatMoney(p.amount)}</span>
+                </div>
+                <div className='text-muted-foreground mt-0.5 truncate text-xs'>
+                  Ref. {formatMonth(p.month).toLowerCase()} · recebido em {formatDate(p.date)}
                   {p.notes && ` · ${p.notes}`}
                 </div>
               </div>
               <Button
                 variant='ghost'
                 size='icon-sm'
-                onClick={() => {
-                  setEditingPayment(p);
-                  setPaymentOpen(true);
-                }}
+                onClick={() => setPaymentSheet({ payment: p })}
                 aria-label='Editar'
               >
                 <Icons.edit />
@@ -338,14 +514,15 @@ export default function SewingPage() {
           onOpenChange={(o) => !o && setEditingEntry(null)}
         />
       )}
-      {paymentOpen && (
+      {paymentSheet && (
         <SewingPaymentSheet
-          key={editingPayment?.id ?? 'novo'}
-          payment={editingPayment}
-          balance={summary?.balance ?? 0}
-          lastPaymentDate={summary?.lastPayment?.date}
+          key={paymentSheet.payment?.id ?? `novo-${paymentSheet.month}`}
+          payment={paymentSheet.payment}
+          month={paymentSheet.month}
+          kind={paymentSheet.kind}
+          amount={paymentSheet.amount}
           open
-          onOpenChange={setPaymentOpen}
+          onOpenChange={(o) => !o && setPaymentSheet(null)}
         />
       )}
       <AlertModal
@@ -365,7 +542,7 @@ export default function SewingPage() {
         onClose={() => setDeletingPayment(null)}
         onConfirm={() => deletingPayment && removePayment.mutate(deletingPayment.id)}
         loading={removePayment.isPending}
-        title='Excluir pagamento?'
+        title='Excluir anotação?'
         description='A receita correspondente no financeiro também será removida.'
       />
     </PageContainer>

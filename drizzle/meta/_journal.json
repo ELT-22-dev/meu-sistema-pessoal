@@ -22,6 +22,13 @@
       "when": 1792080193384,
       "tag": "0002_cabeleireiro",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794327807296,
+      "tag": "0003_costura_acerto_mensal",
+      "breakpoints": true
     }
   ]
 }
