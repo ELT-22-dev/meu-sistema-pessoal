@@ -291,7 +291,9 @@ function MonthBox({
   onDeletePayment: (p: MonthPayment) => void;
 }) {
   const [showEntries, setShowEntries] = useState(false);
+  const [showTeam, setShowTeam] = useState(false);
   const me = data.people.find((p) => p.workerId === null);
+  // A equipe fica fora da conta do mês (a oficina paga eles); só aparece se pedir.
   const team = data.people.filter((p) => p.workerId !== null);
   const teamPieces = team.reduce((s, p) => s + p.pieces, 0);
 
@@ -308,7 +310,6 @@ function MonthBox({
           ) : (
             'Sem produção minha'
           )}
-          {team.length > 0 && ` · Equipe: ${formatNumber(teamPieces)} peças`}
         </CardDescription>
         <CardAction className='text-right'>
           <div className='text-muted-foreground text-xs'>Saldo</div>
@@ -325,10 +326,29 @@ function MonthBox({
             onEditPayment={onEditPayment}
             onDeletePayment={onDeletePayment}
           />
-          {data.people.map((p) => (
-            <PersonBlock key={p.workerId ?? 'eu'} person={p} />
-          ))}
+          {me && <PersonBlock person={me} />}
         </div>
+        {team.length > 0 && (
+          <Button
+            variant='ghost'
+            size='sm'
+            className='w-full'
+            onClick={() => setShowTeam((v) => !v)}
+            aria-expanded={showTeam}
+          >
+            {showTeam
+              ? 'Ocultar produção da equipe'
+              : `Ver produção da equipe (${formatNumber(teamPieces)} peças)`}
+            <Icons.chevronDown className={cn('transition-transform', showTeam && 'rotate-180')} />
+          </Button>
+        )}
+        {showTeam && (
+          <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+            {team.map((p) => (
+              <PersonBlock key={p.workerId} person={p} />
+            ))}
+          </div>
+        )}
         {data.entries > 0 && (
           <Button
             variant='ghost'
