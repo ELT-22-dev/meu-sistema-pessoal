@@ -20,6 +20,8 @@ type Month = {
   month: string;
   entries: number;
   people: Person[];
+  // tudo que foi lançado no mês, somado por modelo (é a minha produção)
+  total: { pieces: number; value: number; models: ModelLine[] };
   // meu acerto com a oficina
   previousBalance: number;
   produced: number;
@@ -29,8 +31,9 @@ type Month = {
 };
 
 /**
- * Produção por mês: para cada mês, cada pessoa (eu primeiro, depois a equipe) com
- * a quantidade e o valor por modelo de peça — e o meu acerto com a oficina:
+ * Produção por mês. Faço o overlock de tudo que a equipe costura, então TODO lançamento
+ * conta como produção minha (`total`, por modelo); `people` detalha em nome de quem foi
+ * lançado. E o meu acerto com a oficina:
  * saldo do mês anterior + minha produção − (pagamentos, adiantamentos e vales) = saldo
  * que passa para o mês seguinte.
  */
@@ -66,6 +69,7 @@ export const GET = handler(async (req) => {
         month: key,
         entries: 0,
         people: [],
+        total: { pieces: 0, value: 0, models: [] },
         previousBalance: 0,
         produced: 0,
         payments: [],
@@ -102,6 +106,16 @@ export const GET = handler(async (req) => {
     person.models.push(line);
     person.pieces += line.pieces;
     person.value = round(person.value + line.value);
+
+    const sum = month.total.models.find((m) => m.modelId === line.modelId);
+    if (sum) {
+      sum.pieces += line.pieces;
+      sum.value = round(sum.value + line.value);
+    } else {
+      month.total.models.push({ ...line });
+    }
+    month.total.pieces += line.pieces;
+    month.total.value = round(month.total.value + line.value);
   }
 
   for (const r of paymentRows) {
@@ -120,7 +134,8 @@ export const GET = handler(async (req) => {
   const ordered = [...months.values()].sort((a, b) => a.month.localeCompare(b.month));
   let carry = 0;
   for (const m of ordered) {
-    m.produced = m.people.find((p) => p.workerId === null)?.value ?? 0;
+    m.total.models.sort((a, b) => b.pieces - a.pieces);
+    m.produced = m.total.value;
     m.previousBalance = carry;
     m.balance = round(carry + m.produced - m.received);
     carry = m.balance;

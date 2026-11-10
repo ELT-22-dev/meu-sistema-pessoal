@@ -91,6 +91,8 @@ export type SewingMonth = {
   month: string;
   entries: number;
   people: MonthPerson[];
+  /** Tudo que foi lançado no mês, por modelo — é a minha produção. */
+  total: { pieces: number; value: number; models: MonthModelLine[] };
   /** Saldo que veio do mês anterior (negativo = recebi a mais). */
   previousBalance: number;
   /** Minha produção no mês. */

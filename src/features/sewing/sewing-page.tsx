@@ -307,10 +307,11 @@ function MonthBox({
 }) {
   const [showEntries, setShowEntries] = useState(false);
   const [showTeam, setShowTeam] = useState(false);
-  const me = data.people.find((p) => p.workerId === null);
-  // A equipe fica fora da conta do mês (a oficina paga eles); só aparece se pedir.
+  // Faço o overlock de tudo que a equipe costura: todo lançamento do mês é produção minha.
+  const me: MonthPerson | null =
+    data.total.pieces > 0 ? { workerId: null, name: 'Eu', role: null, ...data.total } : null;
+  // O detalhe por retista (em nome de quem foi lançado) só aparece se pedir.
   const team = data.people.filter((p) => p.workerId !== null);
-  const teamPieces = team.reduce((s, p) => s + p.pieces, 0);
 
   return (
     <Card>
@@ -353,8 +354,8 @@ function MonthBox({
             aria-expanded={showTeam}
           >
             {showTeam
-              ? 'Ocultar produção da equipe'
-              : `Ver produção da equipe (${formatNumber(teamPieces)} peças)`}
+              ? 'Ocultar separação por retista'
+              : `Ver separado por retista (${team.length})`}
             <Icons.chevronDown className={cn('transition-transform', showTeam && 'rotate-180')} />
           </Button>
         )}
@@ -410,7 +411,7 @@ export default function SewingPage() {
   return (
     <PageContainer
       pageTitle='Costura'
-      pageDescription='Produção por mês — você e cada retista, por tipo de peça.'
+      pageDescription='Produção por mês, por tipo de peça, e o acerto com a oficina.'
       pageHeaderAction={
         <div className='flex gap-2'>
           <Button

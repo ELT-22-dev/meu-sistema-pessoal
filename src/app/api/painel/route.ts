@@ -50,13 +50,13 @@ export const GET = handler(async (req) => {
         (select count(*) from quotes where status in ('rascunho', 'enviado')) as open_quotes`),
     db.execute(sql`
       select
-        (select coalesce(sum(quantity * unit_price), 0) from sewing_entries where worker_id is null)
+        (select coalesce(sum(quantity * unit_price), 0) from sewing_entries)
           - (select coalesce(sum(amount), 0) from sewing_payments) as balance,
         (select coalesce(sum(quantity), 0) from sewing_entries
-         where worker_id is null and date between ${from} and ${to}) as month_pieces,
+         where date between ${from} and ${to}) as month_pieces,
         (select coalesce(sum(quantity * unit_price), 0) from sewing_entries
-         where worker_id is null and date between ${from} and ${to}) as month_value,
-        (select coalesce(sum(quantity), 0) from sewing_entries where worker_id is null and date = ${today}) as today_pieces,
+         where date between ${from} and ${to}) as month_value,
+        (select coalesce(sum(quantity), 0) from sewing_entries where date = ${today}) as today_pieces,
         (select coalesce(sum(round(quantity * unit_price * commission_pct / 100, 2)), 0) from haircut_entries)
           - (select coalesce(sum(amount), 0) from haircut_payments) as salon_balance,
         (select coalesce(sum(quantity), 0) from haircut_entries

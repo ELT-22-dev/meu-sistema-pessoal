@@ -47,7 +47,7 @@ export const GET = handler(async (req) => {
       select date::text as date,
              coalesce(sum(quantity) filter (where worker_id is null), 0) as mine,
              coalesce(sum(quantity) filter (where worker_id is not null), 0) as team,
-             coalesce(sum(quantity * unit_price) filter (where worker_id is null), 0) as value
+             coalesce(sum(quantity * unit_price), 0) as value
       from sewing_entries where date between ${from} and ${to}
       group by date order by date`),
     db.execute(sql`
